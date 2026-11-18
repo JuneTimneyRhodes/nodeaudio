@@ -40,7 +40,7 @@ button, input, select { font: inherit; color: inherit; }
   background: linear-gradient(180deg, #111827 0%, #0c111b 100%);
   border-bottom: 1px solid var(--line); position: relative; z-index: 20;
 }
-#topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(63,216,255,.35), rgba(169,139,255,.35), rgba(255,95,158,.35), transparent); }
+#topbar::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 1px; background: linear-gradient(90deg, transparent, rgba(63,216,255,.35), rgba(169,139,255,.35), rgba(255,95,158,.35), transparent); }
 .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; letter-spacing: -0.01em; font-weight: 500; white-space: nowrap; }
 .brand b { font-weight: 700; background: linear-gradient(90deg, var(--accent), var(--accent2)); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .group { display: flex; align-items: center; gap: 4px; }
@@ -298,12 +298,10 @@ kbd { font: 10.5px var(--mono); padding: 2px 6px; border-radius: 5px; background
 @media (max-width: 1100px) {
   #app { grid-template-columns: 0 1fr 260px; }
   #left { display: none; }
-  .group > #import, .group > #open { display: none; }
 }
 @media (max-width: 760px) {
   #app { grid-template-columns: 1fr; grid-template-rows: 56px 1fr auto auto; grid-template-areas: 'top' 'canvas' 'roll' 'right'; }
   #right { max-height: 38vh; border-left: 0; border-top: 1px solid var(--line); }
-  #topbar { gap: 8px; padding: 0 8px; overflow-x: auto; }
-  .brand span, .meter-wrap, .group:not(.right) { display: none; }
+  #topbar { padding: 0 8px; }
   #toasts { right: 16px; }
 }

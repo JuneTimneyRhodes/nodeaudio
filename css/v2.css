@@ -10,7 +10,7 @@
 #dock:not(.open) #dock-close { display: none; }
 
 
-#topbar { overflow-x: auto; scrollbar-width: none; }
+#topbar { overflow: hidden; }
 .transport { gap: 6px; }
 .chip.sm { flex: none; height: 26px; padding: 0 10px; font-size: 11px; }
 .sm-sel { height: 28px; font-size: 11px; padding-left: 8px; }
@@ -116,7 +116,21 @@ h3 { display: flex; align-items: center; }
 
 @media (max-width: 900px) {
   .rv-stats { grid-template-columns: repeat(3, 1fr); }
-  #monitor, #midi { display: none; }
 }
 
 [hidden] { display: none !important; }
+
+/* top bar overflow: lowest-priority controls move into the ⋯ menu (js/topbar.js) */
+.ovf-hidden { display: none !important; }
+#topbar > * { flex-shrink: 0; }
+#topbar.crowded { gap: 8px; }
+#topbar.crowded .sep { display: none; }
+#topbar.crowded .transport { margin-left: 0; gap: 4px; }
+#topbar.crowded .group { gap: 2px; }
+#more-menu { position: fixed; z-index: 75; display: none; flex-direction: column; gap: 4px; min-width: 230px; padding: 8px; background: rgba(16,21,32,.98); backdrop-filter: blur(12px); border: 1px solid var(--line2); border-radius: 12px; box-shadow: 0 24px 60px -12px rgba(0,0,0,.9); }
+#more-menu.open { display: flex; animation: pop .12s ease-out; }
+.more-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 32px; }
+.more-row > span { color: var(--dim); font-size: 11.5px; padding-left: 8px; }
+.more-row > :only-child { flex: 1; justify-content: flex-start; padding: 0 8px; }
+#more-menu select { max-width: 150px; }
+#more-menu .meter-wrap { width: 100%; }

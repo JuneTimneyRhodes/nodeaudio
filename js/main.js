@@ -15,6 +15,7 @@ import { encodeProject, decodeHash } from './share.js';
 import { codegen, codegenFile, funcName } from './gamesynth.js';
 import { makeZip, encodeWav } from './wav.js';
 import * as proj from './project.js';
+import { fitTopbar } from './topbar.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -48,6 +49,7 @@ class App {
     this.engine.onLiveNote = (on, note, vel, id) => this.recordNote(on, note, vel, id);
     this.bindUI();
     this.bindKeys();
+    fitTopbar($('#topbar'));
     this.loop();
   }
 
