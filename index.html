@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NodeAudio</title>
+  <meta name="description" content="A node-based audio workstation in the browser. Patch synths and samplers, sequence them, export game-ready WAV cues.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0f17'/%3E%3Cpath d='M5 16c3 0 3-8 6-8s3 16 6 16 3-12 6-12 2 4 4 4' stroke='%233fd8ff' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+  <header id="topbar">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" width="26" height="26"><defs><linearGradient id="lg" x1="0" x2="1"><stop offset="0" stop-color="#3fd8ff"/><stop offset=".5" stop-color="#a98bff"/><stop offset="1" stop-color="#ff5f9e"/></linearGradient></defs><rect width="32" height="32" rx="8" fill="#121826"/><path d="M5 16c3 0 3-8 6-8s3 16 6 16 3-12 6-12 2 4 4 4" stroke="url(#lg)" stroke-width="2.6" fill="none" stroke-linecap="round"/></svg>
+      <span>Node<b>Audio</b></span>
+    </div>
+
+    <div class="group">
+      <select id="templates" class="btn ghost" title="Start a new project from a template"></select>
+      <button id="open" class="btn ghost" title="Open project (Ctrl+O)">Open</button>
+      <button id="save" class="btn ghost" title="Save project JSON (Ctrl+S, Shift for Save As)">Save</button>
+      <button id="import" class="btn ghost" title="Import audio samples">Import sample</button>
+      <span class="sep"></span>
+      <button id="undo" class="btn icon ghost" title="Undo (Ctrl+Z)"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M6 3 2 7l4 4M2.5 7H10a4 4 0 0 1 0 8H8" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <button id="redo" class="btn icon ghost" title="Redo (Ctrl+Shift+Z)"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m10 3 4 4-4 4m3.5-4H6a4 4 0 0 0 0 8h2" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    </div>
+
+    <div class="transport">
+      <button id="play" class="btn play" title="Play / stop (Space)"></button>
+      <button id="loop" class="btn icon ghost on" title="Loop playback"><svg viewBox="0 0 16 16" width="15" height="15"><path d="M3 9V7a3 3 0 0 1 3-3h7m-2-2 2 2-2 2M13 7v2a3 3 0 0 1-3 3H3m2 2-2-2 2-2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="pos">
+        <span id="pos-bbt">1.1.1</span><span id="pos-sec">0.00s</span>
+        <div class="pos-track"><div id="pos-bar"></div></div>
+      </div>
+      <div class="meter-wrap"><canvas id="meter" width="320" height="56"></canvas><span id="peak">-∞</span></div>
+    </div>
+
+    <div class="group right">
+      <button id="frame" class="btn icon ghost" title="Frame all (F)"><svg viewBox="0 0 16 16" width="14" height="14"><path d="M2 5V2h3M11 2h3v3M14 11v3h-3M5 14H2v-3" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg></button>
+      <button id="help-btn" class="btn icon ghost" title="Shortcuts (?)">?</button>
+      <button id="export-all" class="btn accent" title="Render every Output node (Ctrl+E)">Export</button>
+    </div>
+  </header>
+
+  <aside id="left" class="panel">
+    <section>
+      <h3>Nodes</h3>
+      <input id="palette-search" class="search" placeholder="Search nodes…" spellcheck="false">
+      <div id="palette"></div>
+    </section>
+    <section class="grow">
+      <h3>Samples</h3>
+      <div id="samples"></div>
+    </section>
+  </aside>
+
+  <main id="canvas"></main>
+
+  <aside id="right" class="panel">
+    <section>
+      <h3>Project</h3>
+      <label class="field"><span>Name</span><input id="p-name" spellcheck="false"></label>
+      <div class="two">
+        <label class="field"><span>BPM</span><input id="p-bpm" type="number" min="20" max="400" step="1"></label>
+        <label class="field"><span>Length (beats)</span><input id="p-len" type="number" min="0.25" max="512" step="0.25"></label>
+      </div>
+      <div class="hint">Loop / cue length: <b id="p-secs"></b></div>
+    </section>
+
+    <section>
+      <h3>Export format</h3>
+      <div class="presets">
+        <button id="preset-godot" class="chip" title="Matches space-rogue's Synth.MIX_RATE: 22050 Hz mono 16-bit PCM">Godot SFX</button>
+        <button id="preset-music" class="chip" title="44.1 kHz stereo 16-bit PCM — for the Music bus">Godot music</button>
+      </div>
+      <div class="two">
+        <label class="field"><span>Sample rate</span>
+          <select id="x-rate"><option>11025</option><option>22050</option><option>32000</option><option>44100</option><option>48000</option></select></label>
+        <label class="field"><span>Channels</span>
+          <select id="x-ch"><option value="1">Mono</option><option value="2">Stereo</option></select></label>
+      </div>
+      <div class="two">
+        <label class="field"><span>Bit depth</span>
+          <select id="x-bits"><option value="8">8-bit</option><option value="16">16-bit</option><option value="24">24-bit</option><option value="32">32-bit float</option></select></label>
+        <label class="field"><span>Peak (dBFS)</span><input id="x-peak" type="number" step="0.1" max="0" min="-24"></label>
+      </div>
+      <label class="check"><input id="x-norm" type="checkbox"><span>Normalize each cue to peak</span></label>
+      <label class="check"><input id="x-trim" type="checkbox"><span>Trim trailing silence (one-shots)</span></label>
+      <div class="hint">Loops get a <code>smpl</code> chunk — Godot 4 imports them looping (“Detect From WAV”). <span id="fmt-line"></span></div>
+    </section>
+
+    <section class="grow">
+      <h3>Cues</h3>
+      <div id="outputs"></div>
+    </section>
+
+    <section>
+      <h3>Inspector</h3>
+      <div id="inspect"></div>
+    </section>
+  </aside>
+
+  <div id="pianoroll"></div>
+</div>
+
+<div id="addmenu">
+  <input placeholder="Add node…" spellcheck="false">
+  <div class="am-list"></div>
+  <div class="am-desc"></div>
+</div>
+
+<div id="help">
+  <div class="help-card">
+    <button class="close btn icon ghost">✕</button>
+    <h2>NodeAudio</h2>
+    <p>Patch nodes left to right: <b>sequence → source → shape → effects → Output</b>. Every Output is one exported cue, named by its <i>Cue name</i>.</p>
+    <div class="keys">
+      <div><kbd>Right-click</kbd> / <kbd>Shift A</kbd> / <kbd>Tab</kbd><span>Add node</span></div>
+      <div><kbd>Drag socket</kbd><span>Connect · drag from an input to unplug</span></div>
+      <div><kbd>Drop wire on empty</kbd><span>Add a node already connected</span></div>
+      <div><kbd>Drag background</kbd><span>Pan (or middle mouse)</span></div>
+      <div><kbd>Wheel</kbd><span>Zoom</span></div>
+      <div><kbd>Shift drag</kbd><span>Box select</span></div>
+      <div><kbd>Space</kbd><span>Play / stop</span></div>
+      <div><kbd>X</kbd> / <kbd>Del</kbd><span>Delete selection or wire</span></div>
+      <div><kbd>Ctrl D</kbd><span>Duplicate</span></div>
+      <div><kbd>Ctrl C / V</kbd><span>Copy / paste</span></div>
+      <div><kbd>Ctrl Z / Shift Z</kbd><span>Undo / redo</span></div>
+      <div><kbd>F</kbd><span>Frame all</span></div>
+      <div><kbd>Ctrl S</kbd><span>Save project (.json)</span></div>
+      <div><kbd>Ctrl E</kbd><span>Export all cues</span></div>
+    </div>
+    <p class="small">Values: drag sideways (Shift = fine), click to type (accepts <code>2k</code>, <code>40ms</code>), double-click to reset, Alt+wheel to nudge. ◆ sockets beside a value accept modulation (LFO, envelope CV…).</p>
+  </div>
+</div>
+
+<div id="busy"><div class="spinner"></div><span id="busy-msg"></span></div>
+<div id="toasts"></div>
+<input id="file-open" type="file" accept=".json,application/json" hidden>
+<input id="file-sample" type="file" accept="audio/*,.wav,.mp3,.ogg,.flac" multiple hidden>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
