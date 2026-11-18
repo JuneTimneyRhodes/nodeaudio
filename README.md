@@ -18,6 +18,21 @@ python -m http.server 5517
 
 Then open <http://localhost:5517>. Run the tests with `node --test tests/`.
 
+## Templates
+
+*New from template…* in the top bar:
+
+| Template | What it shows |
+| --- | --- |
+| SFX bank (space combat) | Laser, explosion and a seamless engine loop as WAV cues, plus a Game Synth cue |
+| Chip groove (music loop) | Step-sequenced bass, polyphonic lead, an arrangement to try |
+| Drum beat (music loop) | Kick, snare and hats synthesised from oscillators and noise, mixed and compressed |
+| Ambient pad (music loop) | Wavetable chords morphing under a slow LFO, chorus, delay, long reverb |
+| Battle theme (song arrangement) | Drums, bass, lead and pads arranged over 16 bars — intro, build, full |
+| Game Synth cues (GDScript) | lock, laser, pickup, shield_hit, explosion, engine_hum built from `Synth.*` calls |
+| UI sounds (menu bank) | ui_move / confirm / cancel / deny on the UI bus |
+| Sample chops (drop a sample in) | A slicing sampler played by a step sequencer — drop audio onto the Sampler |
+
 ## What's in it
 
 **Patching.** Sockets: ● audio, ◆ notes, ▬ Game Synth buffers, and ◆ beside a value
