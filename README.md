@@ -77,6 +77,13 @@ them on the `SFX`, `SFXFar`, `Cockpit`, `UI` and `Music` buses.
 - **WAV.** Every Output node is one cue named by its *Cue name*. Presets: **Godot SFX**
   (22050 Hz mono 16-bit) and **Godot music** (44.1 kHz stereo, −14 LUFS). Normalise to a
   peak or to a loudness target (BS.1770 LUFS, with a peak ceiling) so a bank feels even.
+- **OGG Vorbis.** Set *Format* to OGG (the **Godot music** preset does) for files about a
+  tenth the size of WAV — Godot plays them natively as `AudioStreamOggVorbis`. Quality is
+  Vorbis VBR −1…10 (5 ≈ 160 kb/s, 6 ≈ 192 kb/s stereo). OGG has no loop chunk, so tick
+  *Loop* in Godot's Import dock for looping cues (the manifest lists which ones). WAV stays
+  the default for short SFX, matching the game's `AudioStreamWAV` cues. Encoding uses
+  libvorbis compiled to WebAssembly, vendored in `js/vendor/wasm-media-encoders/`
+  (MIT / BSD — see its `NOTICE.md`) and loaded only when you export an OGG.
 - **Loops** render two passes and keep the second (so tails ring into the start), fold
   an equal-power crossfade over the seam, and carry a `smpl` chunk: Godot 4's default
   import mode, *Detect From WAV*, loops them with no `.import` edits.

@@ -13,7 +13,7 @@ export class RenderView {
     el.innerHTML = `
       <div class="rv-card">
         <div class="rv-head"><b class="rv-name"></b><span class="rv-fmt"></span><span class="grow"></span>
-          <button class="btn sm rv-play">▶ Play</button><button class="btn sm accent rv-dl">⤓ WAV</button><button class="btn icon ghost rv-x">✕</button></div>
+          <button class="btn sm rv-play">▶ Play</button><button class="btn sm accent rv-dl">⤓ Save</button><button class="btn icon ghost rv-x">✕</button></div>
         <div class="rv-stats"></div>
         <div class="rv-label">Waveform</div>
         <canvas class="rv-wave"></canvas>
@@ -33,8 +33,8 @@ export class RenderView {
     this.r = r;
     this.el.classList.add('open');
     const x = this.app.project.export;
-    this.el.querySelector('.rv-name').textContent = r.name + '.wav';
-    this.el.querySelector('.rv-fmt').textContent = `${r.sampleRate} Hz · ${r.channels.length === 1 ? 'mono' : 'stereo'} · ${x.bitDepth === 32 ? '32f' : x.bitDepth + '-bit'}${r.loop ? ' · loop' : ''}`;
+    this.el.querySelector('.rv-name').textContent = r.name + '.' + (r.ext || 'wav');
+    this.el.querySelector('.rv-fmt').textContent = `${r.sampleRate} Hz · ${r.channels.length === 1 ? 'mono' : 'stereo'} · ${x.format === 'ogg' ? 'OGG q' + (x.oggQuality ?? 5) : x.bitDepth === 32 ? '32f' : x.bitDepth + '-bit'}${r.loop ? ' · loop' : ''}`;
     const rms = Math.sqrt(r.channels.reduce((s, c) => s + c.reduce((a, v) => a + v * v, 0), 0) / (r.channels.length * r.channels[0].length));
     const stats = [
       ['Length', r.seconds.toFixed(3) + ' s'], ['Peak', fmtDb(db(r.peak)) + ' dBFS'], ['RMS', fmtDb(db(rms)) + ' dBFS'],

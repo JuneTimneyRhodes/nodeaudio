@@ -11,6 +11,7 @@ import { ensureWorklets } from './worklets.js';
 import { makeBus } from './gamebus.js';
 import * as wav from './wav.js';
 import { measureLufs } from './loudness.js';
+import { encodeRender } from './ogg.js';
 
 const LOOKAHEAD = 0.25;
 const TICK_MS = 40;
@@ -549,8 +550,9 @@ export class Engine {
     return { channels: chans, sampleRate: sr, loop, seconds: chans[0].length / sr, peak: wav.peak(chans), rawPeak, lufs, name, bus: P.bus, variant };
   }
 
+  /** Render and encode in the export format (WAV or Ogg Vorbis). Adds {blob, ext}. */
   async renderWav(outputId, exp, variant = 0) {
     const r = await this.render(outputId, exp, variant);
-    return { ...r, blob: wav.encodeWav(r.channels, r.sampleRate, exp.bitDepth, r.loop) };
+    return { ...r, ...(await encodeRender(r, exp, wav.encodeWav)) };
   }
 }

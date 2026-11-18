@@ -9,7 +9,7 @@ import { TYPES, defaultParams } from './nodes.js';
 export const FORMAT = 'nodeaudio-project';
 export const VERSION = 1;
 
-export const GODOT_EXPORT = { sampleRate: 22050, channels: 1, bitDepth: 16, normalize: true, normMode: 'peak', lufs: -16, peakDb: -1, trim: true, trimDb: -60 };
+export const GODOT_EXPORT = { format: 'wav', oggQuality: 5, sampleRate: 22050, channels: 1, bitDepth: 16, normalize: true, normMode: 'peak', lufs: -16, peakDb: -1, trim: true, trimDb: -60 };
 
 let counter = 0;
 export const uid = (p = 'n') => p + Date.now().toString(36).slice(-5) + (counter++).toString(36) + Math.random().toString(36).slice(2, 5);

@@ -107,8 +107,13 @@
           <select id="x-ch"><option value="1">Mono</option><option value="2">Stereo</option></select></label>
       </div>
       <div class="two">
-        <label class="field"><span>Bit depth</span>
+        <label class="field"><span>Format</span>
+          <select id="x-format"><option value="wav">WAV (PCM)</option><option value="ogg">OGG Vorbis</option></select></label>
+        <label class="field" id="x-bits-f"><span>Bit depth</span>
           <select id="x-bits"><option value="8">8-bit</option><option value="16">16-bit</option><option value="24">24-bit</option><option value="32">32-bit float</option></select></label>
+        <label class="field" id="x-ogg-f" hidden title="Vorbis VBR quality: 3 ≈ 112 kb/s, 5 ≈ 160 kb/s, 6 ≈ 192 kb/s, 8 ≈ 256 kb/s (stereo 44.1 kHz)"><span>OGG quality (−1…10)</span><input id="x-ogg" type="number" min="-1" max="10" step="1"></label>
+      </div>
+      <div class="two">
         <label class="field"><span>Normalize to</span>
           <select id="x-normmode"><option value="peak">Peak</option><option value="lufs">Loudness</option></select></label>
       </div>
@@ -118,7 +123,7 @@
       </div>
       <label class="check"><input id="x-norm" type="checkbox"><span>Normalize each cue</span></label>
       <label class="check"><input id="x-trim" type="checkbox"><span>Trim trailing silence (one-shots)</span></label>
-      <div class="hint">Loops carry a <code>smpl</code> chunk — Godot 4 imports them looping. <span id="fmt-line"></span></div>
+      <div class="hint">WAV loops carry a <code>smpl</code> chunk — Godot 4 imports them looping. OGG is ~10× smaller (best for music); tick Loop on import. <span id="fmt-line"></span></div>
     </section>
 
     <section class="grow">

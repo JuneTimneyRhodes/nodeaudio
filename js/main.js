@@ -15,6 +15,7 @@ import { encodeProject, decodeHash } from './share.js';
 import { codegen, codegenFile, funcName } from './gamesynth.js';
 import { makeZip, encodeWav } from './wav.js';
 import * as proj from './project.js';
+import { encodeRender } from './ogg.js';
 import { fitTopbar } from './topbar.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -393,7 +394,8 @@ class App {
 
   describeFormat() {
     const x = this.project.export;
-    return `${x.sampleRate} Hz · ${x.channels === 1 ? 'mono' : 'stereo'} · ${x.bitDepth === 32 ? '32f' : x.bitDepth + '-bit'} · ${x.normalize ? (x.normMode === 'lufs' ? x.lufs + ' LUFS' : 'peak ' + x.peakDb + ' dB') : 'no normalize'}`;
+    const fmt = x.format === 'ogg' ? `OGG q${x.oggQuality ?? 5}` : `WAV ${x.bitDepth === 32 ? '32f' : x.bitDepth + '-bit'}`;
+    return `${fmt} · ${x.sampleRate} Hz · ${x.channels === 1 ? 'mono' : 'stereo'} · ${x.normalize ? (x.normMode === 'lufs' ? x.lufs + ' LUFS' : 'peak ' + x.peakDb + ' dB') : 'no normalize'}`;
   }
 
   async renderAllVariants(fid) {
@@ -404,7 +406,14 @@ class App {
     return out;
   }
 
-  downloadRender(r) { proj.download(r.blob || encodeWav(r.channels, r.sampleRate, this.project.export.bitDepth, r.loop), proj.safeName(r.name) + '.wav'); }
+  async downloadRender(r) {
+    const { blob, ext } = r.blob ? r : await encodeRender(r, this.project.export, encodeWav);
+    proj.download(blob, proj.safeName(r.name) + '.' + ext);
+  }
+  get ext() { return this.project.export.format === 'ogg' ? 'ogg' : 'wav'; }
+  oggLoopNote(rs) {
+    if (this.project.export.format === 'ogg' && rs.some((r) => r.loop)) this.toast('OGG has no loop chunk: tick Loop in Godot’s Import dock for looping cues (the manifest marks them).');
+  }
 
   async exportOne(fid) {
     const o = this.outputs().find((x) => x.fid === fid);
@@ -412,8 +421,9 @@ class App {
     this.busy(true, `Rendering ${o.params.name}…`);
     try {
       const rs = await this.renderAllVariants(fid);
-      if (rs.length === 1) proj.download(rs[0].blob, proj.safeName(rs[0].name) + '.wav');
-      else proj.download(await makeZip(rs.map((r) => ({ name: proj.safeName(r.name) + '.wav', blob: r.blob }))), proj.safeName(o.params.name) + '_variants.zip');
+      if (rs.length === 1) proj.download(rs[0].blob, proj.safeName(rs[0].name) + '.' + rs[0].ext);
+      else proj.download(await makeZip(rs.map((r) => ({ name: proj.safeName(r.name) + '.' + r.ext, blob: r.blob }))), proj.safeName(o.params.name) + '_variants.zip');
+      this.oggLoopNote(rs);
       this.toast(`${proj.safeName(o.params.name)}${rs.length > 1 ? ` ×${rs.length}` : ''} — ${this.describeFormat()} · ${rs[0].seconds.toFixed(2)}s${rs[0].loop ? ' · loop' : ''}`);
     } catch (e) { console.error(e); this.toast('Export failed: ' + e.message, 'err'); }
     this.busy(false);
@@ -432,13 +442,13 @@ class App {
         let name = proj.safeName(r.name);
         while (used.has(name)) name += '_';
         used.add(name);
-        files.push({ name: name + '.wav', blob: r.blob });
-        cue.files.push(name + '.wav');
+        files.push({ name: name + '.' + r.ext, blob: r.blob });
+        cue.files.push(name + '.' + r.ext);
       }
       cues.push(cue);
     }
     const x = this.project.export;
-    const manifest = { generator: 'NodeAudio', project: this.project.name, sampleRate: x.sampleRate, channels: x.channels, bitDepth: x.bitDepth, normalize: x.normalize ? (x.normMode === 'lufs' ? { lufs: x.lufs, ceilingDb: x.peakDb } : { peakDb: x.peakDb }) : null, cues };
+    const manifest = { generator: 'NodeAudio', project: this.project.name, format: x.format === 'ogg' ? 'ogg' : 'wav', ...(x.format === 'ogg' ? { oggQuality: x.oggQuality } : { bitDepth: x.bitDepth }), sampleRate: x.sampleRate, channels: x.channels, normalize: x.normalize ? (x.normMode === 'lufs' ? { lufs: x.lufs, ceilingDb: x.peakDb } : { peakDb: x.peakDb }) : null, cues };
     files.push({ name: 'nodeaudio_cues.json', blob: new Blob([JSON.stringify(manifest, null, 2)], { type: 'application/json' }) });
     const gs = this.outputs('gs_out');
     if (gs.length) {
@@ -456,7 +466,8 @@ class App {
     try {
       const { files } = await this.renderBank();
       proj.download(await makeZip(files), proj.safeName(this.project.name) + '_cues.zip');
-      this.toast(`Exported ${files.filter((f) => f.name.endsWith('.wav')).length} file(s) + manifest — ${this.describeFormat()}`);
+      this.toast(`Exported ${files.filter((f) => /\.(wav|ogg)$/.test(f.name)).length} file(s) + manifest — ${this.describeFormat()}`);
+      if (this.project.export.format === 'ogg' && this.outputs().some((o) => o.params.loop && !o.params.mute)) this.oggLoopNote([{ loop: true }]);
     } catch (e) { console.error(e); this.toast('Export failed: ' + e.message, 'err'); }
     this.busy(false);
     this.afterRender();
@@ -700,7 +711,9 @@ class App {
     ex('#x-peak', 'peakDb', (v) => Math.min(0, parseFloat(v) || -1));
     ex('#x-trim', 'trim', Boolean);
     on('#preset-godot', 'click', () => { Object.assign(this.project.export, proj.GODOT_EXPORT); this.commit(); this.renderExport(); this.toast('Export preset: Godot SFX — 22050 Hz mono 16-bit (matches Synth.MIX_RATE)'); });
-    on('#preset-music', 'click', () => { Object.assign(this.project.export, { sampleRate: 44100, channels: 2, bitDepth: 16, normalize: true, normMode: 'lufs', lufs: -14, peakDb: -1, trim: false }); this.commit(); this.renderExport(); this.toast('Export preset: Godot music — 44.1 kHz stereo 16-bit, −14 LUFS'); });
+    on('#preset-music', 'click', () => { Object.assign(this.project.export, { format: 'ogg', oggQuality: 6, sampleRate: 44100, channels: 2, bitDepth: 16, normalize: true, normMode: 'lufs', lufs: -14, peakDb: -1, trim: false }); this.commit(); this.renderExport(); this.toast('Export preset: Godot music — Ogg Vorbis q6, 44.1 kHz stereo, −14 LUFS'); });
+    ex('#x-format', 'format', String);
+    ex('#x-ogg', 'oggQuality', (v) => Math.max(-1, Math.min(10, Math.round(parseFloat(v)) || 5)));
 
     on('#help-btn', 'click', () => $('#help').classList.toggle('open'));
     $('#help').addEventListener('click', (e) => { if (e.target.id === 'help' || e.target.closest('.close')) $('#help').classList.remove('open'); });
@@ -813,13 +826,16 @@ class App {
   renderExport() {
     const x = this.project.export;
     $('#x-rate').value = x.sampleRate; $('#x-ch').value = x.channels; $('#x-bits').value = x.bitDepth;
+    const ogg = x.format === 'ogg';
+    $('#x-format').value = ogg ? 'ogg' : 'wav'; $('#x-ogg').value = x.oggQuality ?? 5;
+    $('#x-bits-f').hidden = ogg; $('#x-ogg-f').hidden = !ogg;
     $('#x-norm').checked = x.normalize; $('#x-peak').value = x.peakDb; $('#x-trim').checked = x.trim;
     $('#x-normmode').value = x.normMode || 'peak'; $('#x-lufs').value = x.lufs ?? -16;
     $('#x-normmode').disabled = $('#x-peak').disabled = !x.normalize;
     $('#x-lufs').disabled = !x.normalize || x.normMode !== 'lufs';
     $('#x-peak-label').textContent = x.normMode === 'lufs' ? 'Ceiling (dBFS)' : 'Peak (dBFS)';
-    $('#preset-godot').classList.toggle('on', x.sampleRate === 22050 && x.channels === 1 && x.bitDepth === 16);
-    $('#preset-music').classList.toggle('on', x.sampleRate === 44100 && x.channels === 2 && x.bitDepth === 16);
+    $('#preset-godot').classList.toggle('on', !ogg && x.sampleRate === 22050 && x.channels === 1 && x.bitDepth === 16);
+    $('#preset-music').classList.toggle('on', ogg && x.sampleRate === 44100 && x.channels === 2);
     $('#fmt-line').textContent = this.describeFormat();
   }
 
@@ -865,12 +881,12 @@ class App {
       it.className = 'cue' + (P.mute ? ' muted' : '') + (playing ? ' playing' : '');
       const len = (P.length || timelineSeconds(this.project)).toFixed(2) + ' s' + (P.loop ? '' : ` + ${P.tail}s tail`);
       it.innerHTML = `
-        <div class="cue-top"><span class="nm">${esc(proj.safeName(P.name))}.wav</span>${P.loop ? '<span class="badge">loop</span>' : ''}${P.variants > 1 ? `<span class="badge v">×${P.variants}</span>` : ''}<span class="bus">${esc(P.bus || '')}</span></div>
+        <div class="cue-top"><span class="nm">${esc(proj.safeName(P.name))}.${this.ext}</span>${P.loop ? '<span class="badge">loop</span>' : ''}${P.variants > 1 ? `<span class="badge v">×${P.variants}</span>` : ''}<span class="bus">${esc(P.bus || '')}</span></div>
         <div class="cue-meta">${r ? `${r.seconds.toFixed(2)} s · peak ${(20 * Math.log10(r.peak || 1e-9)).toFixed(1)} dB${isFinite(r.lufs) ? ` · ${r.lufs.toFixed(1)} LUFS` : ''}` : len}</div>
         <div class="cue-btns">
           <button class="btn sm solo">${playing ? ICON.stop : ICON.play} Live</button>
           <button class="btn sm view" title="Render and inspect: waveform, spectrogram, loudness">Inspect</button>
-          <button class="btn sm accent exp">⤓ WAV</button>
+          <button class="btn sm accent exp">⤓ ${this.ext.toUpperCase()}</button>
         </div>`;
       it.querySelector('.solo').addEventListener('click', () => this.toggleSolo(o.fid));
       it.querySelector('.view').addEventListener('click', () => this.viewRender(o.fid));
@@ -889,7 +905,8 @@ class App {
       list.appendChild(it);
     }
     const n = outs.filter((o) => !o.params.mute).reduce((a, o) => a + Math.max(1, o.params.variants | 0), 0);
-    $('#export-all').textContent = n > 1 || gs.length ? `Export all (${n} WAV${gs.length ? ' + .gd' : ''})` : 'Export WAV';
+    const E = this.ext.toUpperCase();
+    $('#export-all').textContent = n > 1 || gs.length ? `Export all (${n} ${E}${gs.length ? ' + .gd' : ''})` : `Export ${E}`;
     $('#export-gd').hidden = !gs.length;
   }
 

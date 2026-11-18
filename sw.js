@@ -1,10 +1,11 @@
 // Offline support. Network-first for the app's own files, so a new deploy is picked up
 // on the next load; the cache only answers when the network does not.
-const CACHE = 'nodeaudio-v3';
+const CACHE = 'nodeaudio-v4';
 const SHELL = ['./', 'index.html', 'css/style.css', 'css/v2.css', 'icon.svg', 'manifest.webmanifest',
   'js/main.js', 'js/editor.js', 'js/engine.js', 'js/nodes.js', 'js/gamesynth.js', 'js/gamebus.js', 'js/loudness.js', 'js/dsp.js',
   'js/pianoroll.js', 'js/song.js', 'js/sampleeditor.js', 'js/renderview.js', 'js/live.js', 'js/recorder.js', 'js/presets.js',
-  'js/share.js', 'js/topbar.js', 'js/project.js', 'js/templates.js', 'js/wav.js', 'js/worklets.js'];
+  'js/share.js', 'js/topbar.js', 'js/project.js', 'js/templates.js', 'js/wav.js', 'js/worklets.js', 'js/ogg.js',
+  'js/vendor/wasm-media-encoders/WasmMediaEncoder.min.js', 'js/vendor/wasm-media-encoders/ogg.wasm'];
 
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', (e) => {
