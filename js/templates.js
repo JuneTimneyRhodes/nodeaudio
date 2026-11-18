@@ -208,6 +208,81 @@ export const TEMPLATES = {
     p.view = { x: 40, y: 30, zoom: 0.3 };
   }),
 
+  'Deep space ambient (3 min)': () => graph('deep_space_ambient', (N, L, p) => {
+    // Vast, slow, cold: a D-minor pedal under drifting pads, distant bells lost in
+    // echo, a filtered pulse through the middle, and solar wind throughout.
+    // 60 BPM, so one beat is one second and the arrangement reads in seconds.
+    p.bpm = 60; p.lengthBeats = 64;
+
+    // --- the shared space: everything but the drone goes through one long room
+    const room = N('reverb', 1380, 1300, { size: 9, predelay: 0.08, damp: 3200, mix: 0.6 });
+
+    // --- drone: triangle + sub sine an octave down, slow swells on each change
+    const bass = N('pianoroll', 0, 0, { length: 64 }, { notes: [
+      { s: 0, l: 32, n: 38, v: 0.9 }, { s: 32, l: 16, n: 34, v: 0.85 }, { s: 48, l: 16, n: 36, v: 0.85 }] });
+    const dTri = N('osc', 300, 0, { wave: 'triangle', gain: 0.32 });
+    const dSub = N('osc', 300, 460, { wave: 'sine', octave: -1, gain: 0.22 });
+    const dEnv = N('adsr', 576, 0, { a: 6, d: 2, s: 0.9, r: 8, amount: 0, velsens: 0.2 });
+    const dLp = N('filter', 852, 0, { cutoff: 260, q: 0.7 });
+    L(bass, 'notes', dTri, 'notes'); L(bass, 'notes', dSub, 'notes'); L(bass, 'notes', dEnv, 'notes');
+    L(dTri, 'out', dEnv, 'in'); L(dSub, 'out', dEnv, 'in'); L(dEnv, 'out', dLp, 'in');
+
+    // --- pads: Dm(add9) – Bbmaj7(#11) – Fmaj7 – Csus2, wavetable drifting on a 40 s LFO
+    const padNotes = chordNotes([[0, 15.5, [50, 57, 64, 65, 69]], [16, 15.5, [46, 53, 57, 62, 64]], [32, 15.5, [41, 48, 52, 57, 64]], [48, 15.5, [48, 55, 62, 67]]], 0.65);
+    const pad = N('pianoroll', 0, 960, { length: 64 }, { notes: padNotes });
+    const pw = N('wavetable', 300, 960, { table: 'vocal', voices: 8, position: 0.35, gain: 0.3 });
+    const pLfo = N('lfo', 300, 1460, { rate: 0.025, depth: 0.28, offset: 0.45, wave: 'sine' });
+    const pe = N('adsr', 576, 960, { a: 5, d: 3, s: 0.85, r: 7, amount: 700, velsens: 0.2 });
+    const pf = N('filter', 852, 960, { cutoff: 900, q: 0.9 });
+    const pfLfo = N('lfo', 852, 1320, { rate: 0.04, depth: 320, wave: 'triangle' });
+    const pch = N('chorus', 1116, 960, { rate: 0.2, depth: 0.007, mix: 0.6 });
+    L(pad, 'notes', pw, 'notes'); L(pad, 'notes', pe, 'notes'); L(pLfo, 'out', pw, 'p:position');
+    L(pw, 'out', pe, 'in'); L(pe, 'out', pf, 'in'); L(pe, 'cv', pf, 'p:cutoff'); L(pfLfo, 'out', pf, 'p:cutoff');
+    L(pf, 'out', pch, 'in'); L(pch, 'out', room, 'in');
+
+    // --- bells: sparse D-minor pentatonic, far away, echoing
+    const bellNotes = [[0, 74, 0.7], [3, 69, 0.5], [5.5, 72, 0.6], [10, 77, 0.55], [13, 74, 0.45], [16, 69, 0.65], [19.5, 67, 0.5], [22, 72, 0.55], [26, 76, 0.5], [29, 74, 0.4]]
+      .map(([s, n, v]) => ({ s, l: 2, n, v }));
+    const bell = N('pianoroll', 0, 1760, { length: 32 }, { notes: bellNotes });
+    const bo = N('osc', 300, 1760, { wave: 'triangle', unison: 2, spread: 5, voices: 6, gain: 0.6 });
+    const be = N('adsr', 576, 1760, { a: 0.003, d: 3, s: 0, r: 3, amount: 0, velsens: 0.6 });
+    const bf = N('filter', 852, 1760, { cutoff: 7000, q: 0.6 });
+    const bd = N('delay', 1116, 1760, { sync: '0.75', feedback: 0.55, mix: 0.45, damp: 2400 });
+    L(bell, 'notes', bo, 'notes'); L(bell, 'notes', be, 'notes'); L(bo, 'out', be, 'in'); L(be, 'out', bf, 'in'); L(bf, 'out', bd, 'in'); L(bd, 'out', room, 'in');
+
+    // --- pulse: filtered eighth-note arp through the middle section
+    const arpSteps = Array.from({ length: 32 }, (_, i) => ({ on: true, semi: [0, 7, 12, 15, 14, 12, 7, 3, 0, 7, 10, 12, 15, 17, 14, 10][i % 16], vel: i % 4 === 0 ? 0.9 : 0.55 }));
+    const arp = N('stepseq', 0, 2300, { root: 50, rate: '0.5', gate: 0.35 }, { steps: arpSteps });
+    const ao = N('osc', 336, 2300, { wave: 'sawtooth', unison: 2, spread: 10, voices: 2, gain: 0.42 });
+    const ae = N('adsr', 612, 2300, { a: 0.005, d: 0.35, s: 0, r: 0.3, amount: 1100, velsens: 0.6 });
+    const af = N('filter', 888, 2300, { cutoff: 650, q: 4, slope: '2' });
+    const afLfo = N('lfo', 888, 2680, { rate: 0.05, depth: 380, wave: 'sine' });
+    const ad = N('delay', 1152, 2300, { sync: '0.75', feedback: 0.5, mix: 0.35, damp: 2000 });
+    L(arp, 'notes', ao, 'notes'); L(arp, 'notes', ae, 'notes'); L(ao, 'out', ae, 'in'); L(ae, 'out', af, 'in');
+    L(ae, 'cv', af, 'p:cutoff'); L(afLfo, 'out', af, 'p:cutoff'); L(af, 'out', ad, 'in'); L(ad, 'out', room, 'in');
+
+    // --- solar wind: pink noise through a slowly wandering band, faded in over the opening
+    const wTrig = N('trigger', 0, 3000, { at: 0, length: 200 });
+    const wn = N('noise', 240, 3000, { color: 'pink', gain: 0.6, seed: 4242 });
+    const wf = N('filter', 480, 3000, { type: 'bandpass', cutoff: 1700, q: 1.3 });
+    const wLfo = N('lfo', 480, 3340, { rate: 0.03, depth: 1100, wave: 'sine' });
+    const we = N('adsr', 744, 3000, { a: 12, d: 1, s: 1, r: 6, amount: 0, velsens: 0 });
+    const wg = N('gain', 1020, 3000, { gain: 0.9 });
+    L(wTrig, 'notes', we, 'notes'); L(wn, 'out', wf, 'in'); L(wLfo, 'out', wf, 'p:cutoff'); L(wf, 'out', we, 'in'); L(we, 'out', wg, 'in'); L(wg, 'out', room, 'in');
+
+    // --- mix
+    const mx = N('mixer', 1680, 600, { l1: 0.65, l2: 1 });
+    const cp = N('comp', 1932, 600, { threshold: -20, ratio: 2, attack: 0.05, release: 0.4, makeup: 2 });
+    const out = N('output', 2184, 600, { name: 'deep_space_ambient', bus: 'Music', loop: true, tail: 0, seam: 2 });
+    L(dLp, 'out', mx, 'in1'); L(room, 'out', mx, 'in2'); L(mx, 'out', cp, 'in'); L(cp, 'out', out, 'in');
+
+    // 48 bars = 192 s: wind + drone open; pads at 0:16; bells at 0:32; the pulse 1:04–2:24;
+    // bells return 2:08; pads let go at 2:56 and the drone and wind carry the loop back round
+    arrange(p, 48, [[bass, [[0, 192]]], [pad, [[16, 160]]], [bell, [[32, 64], [128, 48]]], [arp, [[64, 80]]]]);
+    p.export = { ...p.export, ...MUSIC, lufs: -18 };
+    p.view = { x: 40, y: 30, zoom: 0.3 };
+  }),
+
   'Game Synth cues (GDScript)': () => graph('synth_cues', (N, L, p) => {
     p.bpm = 120; p.lengthBeats = 2;
     const row = (y, chain, name, extra = {}) => {

@@ -28,6 +28,7 @@ Then open <http://localhost:5517>. Run the tests with `node --test tests/`.
 | Chip groove (music loop) | Step-sequenced bass, polyphonic lead, an arrangement to try |
 | Drum beat (music loop) | Kick, snare and hats synthesised from oscillators and noise, mixed and compressed |
 | Ambient pad (music loop) | Wavetable chords morphing under a slow LFO, chorus, delay, long reverb |
+| Deep space ambient (3 min) | Slow D-minor drone, drifting wavetable pads, distant echoing bells, a filtered mid-section pulse and solar-wind noise, arranged over 3:12 and exported as a seamless Music-bus loop |
 | Battle theme (song arrangement) | Drums, bass, lead and pads arranged over 16 bars — intro, build, full |
 | Game Synth cues (GDScript) | lock, laser, pickup, shield_hit, explosion, engine_hum built from `Synth.*` calls |
 | UI sounds (menu bank) | ui_move / confirm / cancel / deny on the UI bus |
