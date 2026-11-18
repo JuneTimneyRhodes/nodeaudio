@@ -1,0 +1,11 @@
+{
+  "name": "NodeAudio",
+  "short_name": "NodeAudio",
+  "description": "Node-based audio workstation: patch, sequence, arrange and export game-ready audio.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#080b11",
+  "theme_color": "#0c111b",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

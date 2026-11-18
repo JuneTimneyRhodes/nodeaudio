@@ -1,11 +1,12 @@
 # NodeAudio
 
 A node-based audio workstation that runs entirely in the browser, in the spirit of
-Blender's *Audionodes*. Patch sequencers, oscillators, samplers and effects together,
-hear it live, and export game-ready `.wav` cues.
+Blender's *Audionodes*. Build sound effects and full soundtracks by patching
+sequencers, synths, samplers and effects together; arrange them into songs; export
+game-ready `.wav` files — or, for the game's own synth, GDScript.
 
-Static files only: no build step, no server code. Open it from GitHub Pages or any
-static host.
+Static files only: no build step and no server code. Live at
+<https://junetimneyrhodes.github.io/nodeaudio/>, installable as an offline app.
 
 ## Run locally
 
@@ -15,89 +16,103 @@ ES modules need to be served over http (not `file://`):
 python -m http.server 5517
 ```
 
-Then open <http://localhost:5517>.
+Then open <http://localhost:5517>. Run the tests with `node --test tests/`.
 
-## Deploy to GitHub Pages
+## What's in it
 
-Push this folder to a public repo, then either:
+**Patching.** Sockets: ● audio, ◆ notes, ▬ Game Synth buffers, and ◆ beside a value
+for modulation (anything audio patched there is added to that parameter). Drop a wire
+on empty canvas to add a node already connected. **Ctrl G** collapses a selection into
+a **Group** (Tab to enter/leave, Ctrl Shift G to ungroup); drop a wire on a group's `+`
+socket to add a socket. Save any selection as a **preset**; presets export/import as JSON.
 
-- **Settings → Pages → Deploy from a branch → `main` / root**, or
-- keep `.github/workflows/pages.yml` (included) and set **Settings → Pages → Source → GitHub Actions**.
+**Synthesis.** Oscillator (unison + spread, pitch sweep, glide), Wavetable (8-frame
+morph, built-in tables or frames sliced from a sample), Sampler (pitched or sliced,
+loop points), Granular, Noise, Envelope, LFO (tempo sync), Random (per-variant or
+per-note), Filter (to 48 dB/oct), Delay (tempo sync), Reverb, Chorus, Distortion,
+Bitcrusher, Compressor, Mixer (level + pan), Pan, Gain, Scope.
 
-`.nojekyll` is included so Pages serves the files untouched.
+**Polyphony.** Set *Voices* on an Oscillator, Wavetable, Sampler or Synth Cue.
+Envelopes, filters, gains, distortion and pan placed after it become polyphonic too,
+so a poly envelope on a filter's cutoff works per note. Chord turns single notes into
+chords.
 
-## How it works
+**Playing and sequencing.** Trigger, Step Sequencer, Piano Roll (with recording),
+Transpose, Chord, and **Live Input** — MIDI keyboards (Web MIDI, Chrome/Edge) or the
+computer keyboard (⌨ in the top bar: `A W S E D F T G Y H U J K O L P ;`, Z/X octave,
+C/V velocity).
 
-| Socket | Meaning |
-| --- | --- |
-| ● cyan | audio |
-| ◆ amber | notes (event streams from sequencers) |
-| ◆ violet, beside a value | modulation input; audio patched here is added to that parameter |
+**Arrangement.** The dock's Arrangement tab is a timeline. Each track plays one node:
+a sequencer plays its notes only inside its clips (from the clip's offset); a Sampler
+plays its sample from the clip start, so you can lay out vocal chops or loops. Toggle
+**Song** in the top bar to play and export the arrangement instead of the pattern.
 
-Typical chain: **Trigger / Step Sequencer / Piano Roll → Oscillator / Noise / Sampler →
-Envelope → Filter → effects → Output**.
+**Samples.** Drop audio *or video* files anywhere (video is reduced to its audio), or
+record the microphone, or capture the audio of another tab/window (e.g. a video you
+are watching) with **● Tab audio**. Only use audio you have the rights to. The
+Sample editor trims, cuts, normalises, reverses, fades, changes gain, resamples to
+shrink the project, auto-slices at transients (or equal slices), and sets loop regions.
 
-- **Every Output node is one cue.** Its *Cue name* becomes the filename. A project with
-  several outputs is a whole SFX bank; *Export all* writes a `.zip`.
-- Unconnected Oscillators/Samplers/Envelopes fire once at the start of each loop, so a
-  one-shot SFX needs no sequencer at all.
-- Playback and export share one graph compiler: export renders the same patch in an
-  `OfflineAudioContext`, so the file matches what you heard.
+## Exporting for space-rogue-repo
 
-## Export format (space-rogue-repo)
+The game (Godot 4) synthesises its cues at `Synth.MIX_RATE = 22050` Hz mono and plays
+them on the `SFX`, `SFXFar`, `Cockpit`, `UI` and `Music` buses.
 
-The game (Godot 4) synthesises its cues at `Synth.MIX_RATE = 22050` Hz, mono, into
-16-bit `AudioStreamWAV`. The **Godot SFX** preset matches that exactly; **Godot music**
-is 44.1 kHz stereo 16-bit for the `Music` bus.
+- **WAV.** Every Output node is one cue named by its *Cue name*. Presets: **Godot SFX**
+  (22050 Hz mono 16-bit) and **Godot music** (44.1 kHz stereo, −14 LUFS). Normalise to a
+  peak or to a loudness target (BS.1770 LUFS, with a peak ceiling) so a bank feels even.
+- **Loops** render two passes and keep the second (so tails ring into the start), fold
+  an equal-power crossfade over the seam, and carry a `smpl` chunk: Godot 4's default
+  import mode, *Detect From WAV*, loops them with no `.import` edits.
+- **Variants.** Set *Variants* on an Output to export `name_2.wav`, `name_3.wav`… with
+  different noise seeds, Random-node values and a small pitch offset — the game already
+  plays several variants per weapon so repeats don't buzz.
+- **Bus monitoring.** *Monitor: game buses* plays each cue through approximations of
+  `default_bus_layout.tres` (the SFX room, SFXFar's echo) according to its Output's
+  *Game bus*. Exports stay dry, so the room is not baked in twice.
+- **Export to folder** (Chrome/Edge) writes the WAVs plus `nodeaudio_cues.json` (bus,
+  loop, length, peak, loudness per cue) straight into a folder such as
+  `assets/audio/sfx`, and remembers it per project. *Export all* puts the same files in
+  a zip.
+- **Inspect** renders a cue and shows its waveform, spectrogram, peak, RMS, LUFS and
+  crest factor.
 
-- PCM WAV, 8/16/24-bit or 32-bit float.
-- Each cue normalised to a peak (default −1 dBFS); one-shots have trailing silence
-  trimmed.
-- **Loop** outputs render two passes and keep the second, so reverb/delay tails from the
-  previous pass ring into the start, then fold a short equal-power crossfade over the
-  seam (same idea as `Synth.loop_seam`). They carry a `smpl` chunk with the loop points:
-  Godot 4's default import loop mode, *Detect From WAV*, picks them up, so the file
-  loops in-game with no `.import` edits.
-- Leave reverb off cues that the game routes through `SFX`/`SFXFar`: those buses
-  already add the room. `Cockpit` and `UI` cues are played dry.
+### GDScript (Game Synth nodes)
+
+The game prefers making sounds in code to shipping files. The **Game Synth** nodes
+(`Synth.tone`, `Synth.noise`, `Synth.lowpass`, `Synth.band`, `Synth.layer`,
+`Synth.drive`, `Synth.comb`, `Synth.chorus`, `Synth.reverb_approx`, …) are a one-to-one
+port of `scripts/audio/synth.gd`. End a chain in a **Synth Cue**: it plays the buffer
+exactly as the game would bake it, and **GDScript** / **⤓ .gd** export a
+`bake_<name>(rng)` function that calls `Synth` with the same numbers. Noise uses a
+different random generator, so it is equivalent rather than bit-identical.
 
 ## Project files
 
-*Save* writes `<name>.nodeaudio.json`: nodes, links, settings and every imported sample
-embedded as base64, so one file is the whole project. The working copy is also
-autosaved to IndexedDB in the browser.
-
-```jsonc
-{
-  "format": "nodeaudio-project", "version": 1,
-  "name": "sfx_bank", "bpm": 120, "lengthBeats": 2,
-  "export": { "sampleRate": 22050, "channels": 1, "bitDepth": 16, "normalize": true, "peakDb": -1, "trim": true },
-  "nodes": [{ "id": "…", "type": "osc", "x": 240, "y": 0, "params": { "wave": "square", "freq": 220 } }],
-  "links": [{ "id": "…", "from": { "node": "…", "port": "out" }, "to": { "node": "…", "port": "p:cutoff" } }],
-  "samples": [{ "id": "…", "name": "kick.wav", "mime": "audio/wav", "data": "<base64>" }]
-}
-```
-
-## Shortcuts
-
-`Right-click` / `Shift A` / `Tab` add node · drag a socket to connect, drag from an input to
-unplug · drop a wire on empty canvas to add a connected node · `Space` play ·
-`X`/`Del` delete · `Ctrl D` duplicate · `Ctrl Z`/`Ctrl Shift Z` undo/redo · `F` frame all ·
-`Ctrl S` save · `Ctrl E` export. Values: drag sideways (Shift = fine), click to type
-(`2k`, `40ms` work), double-click to reset.
+*Save* writes `<name>.nodeaudio.json`: nodes (with groups nested), links, the
+arrangement, settings and every sample embedded as base64 — one file is the whole
+project and opens the same on any device. The working copy also autosaves in the
+browser. *Share* copies a link with the project deflated into the URL (no samples).
 
 ## Layout
 
 ```
-index.html
-css/style.css
-js/main.js        app shell, panels, file I/O, export
-js/editor.js      node canvas, wires, parameter widgets
-js/nodes.js       node type definitions (sockets, params, Web Audio builders)
-js/engine.js      graph compiler, look-ahead scheduler, offline render
-js/pianoroll.js   piano roll drawer
-js/wav.js         WAV encoder (+smpl), loop seam, normalise/trim, zip writer
-js/project.js     project JSON, undo history, autosave
-js/templates.js   starter projects
-js/worklets.js    bitcrusher AudioWorklet
+index.html, css/            page and styles
+js/main.js                  app shell, panels, file I/O, export
+js/editor.js                node canvas, wires, groups, parameter widgets
+js/nodes.js                 node types (sockets, params, Web Audio builders)
+js/engine.js                flattening, voices, scheduler, live input, offline render
+js/gamesynth.js             Synth.gd port, Game Synth nodes, GDScript codegen
+js/gamebus.js               approximations of the game's buses for monitoring
+js/song.js                  arrangement timeline
+js/pianoroll.js             piano roll
+js/sampleeditor.js          sample editor
+js/live.js, recorder.js     MIDI/keyboard input, mic/tab recording
+js/loudness.js, dsp.js      BS.1770 loudness, FFT, spectrogram, onset detection
+js/renderview.js            render inspector
+js/wav.js                   WAV encoder (+smpl), loop seam, normalise/trim, zip
+js/project.js, presets.js   project JSON, undo, autosave, presets
+js/share.js, worklets.js    share links, AudioWorklets (bitcrusher, granular)
+sw.js, manifest.webmanifest offline app
+tests/                      node --test unit tests
 ```

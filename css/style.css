@@ -250,8 +250,6 @@ code { font-family: var(--mono); font-size: 10.5px; background: rgba(255,255,255
 .w-output-bar .info { margin-left: auto; font: 10px var(--mono); color: var(--dim); }
 
 /* ------------------------------------------------------------------ piano roll */
-#pianoroll { grid-area: roll; height: 0; overflow: hidden; background: #0a0e15; border-top: 1px solid var(--line); display: flex; flex-direction: column; transition: height .2s ease; }
-#pianoroll.open { height: 300px; }
 .pr-bar { display: flex; align-items: center; gap: 12px; padding: 6px 10px; border-bottom: 1px solid var(--line); background: var(--panel); flex: none; }
 .pr-title { font-weight: 600; color: var(--notes); }
 .pr-ctl { display: flex; align-items: center; gap: 6px; color: var(--dim); }

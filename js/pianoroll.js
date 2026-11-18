@@ -22,8 +22,8 @@ export class PianoRoll {
         <label class="pr-ctl">Zoom <input class="pr-zoom" type="range" min="16" max="160" value="48"></label>
         <span class="pr-help">click: add · drag: move · drag edge: resize · right-click / double-click: delete · shift-drag ↕: velocity</span>
         <span class="grow"></span>
+        <button class="btn sm rec-btn" id="pr-rec" title="Arm recording: notes played on ⌨ / MIDI while the transport runs are written here">● Rec</button>
         <button class="btn ghost pr-clear">Clear</button>
-        <button class="btn ghost pr-close" title="Close (Esc)">✕</button>
       </div>
       <div class="pr-scroll"><canvas class="pr-canvas"></canvas></div>`;
     this.scroll = el.querySelector('.pr-scroll');
@@ -31,7 +31,6 @@ export class PianoRoll {
     this.g = this.cv.getContext('2d');
     el.querySelector('.pr-snap').addEventListener('change', (e) => (this.snap = parseFloat(e.target.value)));
     el.querySelector('.pr-zoom').addEventListener('input', (e) => { this.beatW = +e.target.value; this.layout(); });
-    el.querySelector('.pr-close').addEventListener('click', () => this.close());
     el.querySelector('.pr-clear').addEventListener('click', () => { if (this.node) { this.node.data.notes = []; this.changed(); } });
     this.cv.addEventListener('pointerdown', (e) => this.down(e));
     this.cv.addEventListener('pointermove', (e) => this.hover(e));
@@ -41,7 +40,7 @@ export class PianoRoll {
 
   open(node) {
     this.node = node;
-    this.el.classList.add('open');
+    this.app.showDock('roll');
     this.el.querySelector('.pr-title').textContent = 'Piano Roll — ' + (node.params.length) + ' beats';
     this.layout();
     // scroll to the notes
@@ -49,11 +48,11 @@ export class PianoRoll {
     const mid = ns.length ? ns.reduce((a, b) => a + b.n, 0) / ns.length : 60;
     this.scroll.scrollTop = (HI - mid) * ROWH - this.scroll.clientHeight / 2;
   }
-  close() { this.el.classList.remove('open'); this.node = null; }
+  close() { if (this.node && this.app.hideDock) this.app.hideDock(); this.node = null; }
   get isOpen() { return !!this.node; }
 
   layout() {
-    if (!this.node) return;
+    if (!this.node) { this.g.clearRect(0, 0, this.cv.width, this.cv.height); return; }
     const dpr = Math.min(2, devicePixelRatio || 1);
     this.W = KEYW + this.node.params.length * this.beatW;
     this.H = (HI - LO + 1) * ROWH;

@@ -1,0 +1,7 @@
+{
+  "name": "nodeaudio",
+  "private": true,
+  "type": "module",
+  "description": "Static site; package.json only exists so Node runs the tests as ES modules.",
+  "scripts": { "test": "node --test tests/" }
+}

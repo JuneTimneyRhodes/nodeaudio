@@ -47,6 +47,13 @@ export const TEMPLATES = {
     const f3 = N('filter', 504, 1000, { cutoff: 520, q: 2.5 });
     const out3 = N('output', 780, 1000, { name: 'engine_loop', loop: true, tail: 0, seam: 0.12, volume: -3 });
     L(nz3, 'out', mx, 'in1'); L(o3, 'out', mx, 'in2'); L(mx, 'out', f3, 'in'); L(lfo, 'out', f3, 'p:cutoff'); L(f3, 'out', out3, 'in');
+
+    // Game Synth: the same kind of cue built from the game's own Synth calls -> GDScript
+    const gt = N('gs_tone', 1100, 1000, { dur: 0.12, f0: 600, f1: 1080, wave: 'SOFT', decay: 1.2 });
+    const gn = N('gs_normalize', 1360, 1000, { peak: 0.45 });
+    const ge = N('gs_edges', 1600, 1000, { attack: 0.0035, release: 0.01 });
+    const gc = N('gs_out', 1840, 1000, { name: 'lock' });
+    L(gt, 'out', gn, 'in'); L(gn, 'out', ge, 'in'); L(ge, 'out', gc, 'in');
     p.view = { x: 40, y: 40, zoom: 0.62 };
   }),
 
@@ -64,7 +71,7 @@ export const TEMPLATES = {
     chords.forEach((c, i) => c.forEach((n) => notes.push({ s: i * 4, l: 3.5, n, v: 0.75 })));
     [72, 75, 79, 77, 75, 74, 72, 70].forEach((n, i) => notes.push({ s: i * 2 + 0.5, l: 1, n, v: 0.9 }));
     const roll = N('pianoroll', 0, 520, { length: 16 }, { notes });
-    const lead = N('osc', 336, 520, { wave: 'sawtooth', gain: 0.3, glide: 0.03 });
+    const lead = N('osc', 336, 520, { wave: 'sawtooth', gain: 0.22, unison: 3, spread: 12, voices: 6 });
     const vib = N('lfo', 336, 880, { rate: 5.5, depth: 12 });
     const le = N('adsr', 600, 520, { a: 0.01, d: 0.3, s: 0.6, r: 0.25, amount: 0 });
     const dl = N('delay', 876, 520, { time: (60 / 132) * 0.75, feedback: 0.4, mix: 0.3 });
@@ -77,7 +84,10 @@ export const TEMPLATES = {
     const sc = N('scope', 1836, 300, {});
     const out = N('output', 2112, 300, { name: 'chip_groove', loop: true, tail: 0, seam: 0.01 });
     L(bf, 'out', mx, 'in1'); L(rv, 'out', mx, 'in2'); L(mx, 'out', cp, 'in'); L(cp, 'out', sc, 'in'); L(sc, 'out', out, 'in');
-    p.export = { ...p.export, sampleRate: 44100, channels: 2 };
+    p.export = { ...p.export, sampleRate: 44100, channels: 2, normMode: 'lufs', lufs: -14, trim: false };
+    // an arrangement: bass alone for 2 bars, then the chords + lead join (toggle Song in the top bar)
+    p.song = { enabled: false, bars: 12, tracks: [{ id: 'tb', node: sq.id, mute: false }, { id: 'tl', node: roll.id, mute: false }],
+      clips: [{ id: 'c1', track: 'tb', start: 0, len: 48, offset: 0 }, { id: 'c2', track: 'tl', start: 8, len: 32, offset: 0 }, { id: 'c3', track: 'tl', start: 40, len: 8, offset: 12 }] };
     p.view = { x: 40, y: 60, zoom: 0.55 };
   }),
 

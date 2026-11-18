@@ -1,6 +1,6 @@
 // Node canvas: pan/zoom world, DOM nodes, SVG wires, parameter widgets.
 
-import { TYPES, CATEGORIES, inputSockets, noteName } from './nodes.js';
+import { TYPES, CATEGORIES, inputsOf, outputsOf, noteName, wavetablePreview } from './nodes.js';
 import { makeNode, uid } from './project.js';
 
 const SVG_OFF = 50000; // the wire layer is a huge SVG offset by this much, so hit-testing works everywhere
@@ -67,6 +67,7 @@ export class Editor {
         <div class="nodes"></div>
       </div>
       <div class="box-select"></div>
+      <div class="crumbs"></div>
       <div class="empty-hint"><b>Right-click</b> or <b>Shift A</b> to add a node · drag sockets to patch · <b>Space</b> play</div>`;
     this.world = el.querySelector('.world');
     this.linksG = el.querySelector('.links');
@@ -77,10 +78,17 @@ export class Editor {
     this.selLink = null;
     this.nodeEls = new Map();
     this.widgets = new Map(); // nodeId -> {draw()}
+    this.path = [];           // group nodes we are inside, outermost first
+    this.crumbs = el.querySelector('.crumbs');
     this._bind();
   }
 
   get P() { return this.app.project; }
+  /** The graph being edited: the project, or the innermost open group's contents. */
+  get G() { return this.path.length ? this.path[this.path.length - 1].data : this.P; }
+  get parent() { return this.path[this.path.length - 1] || null; }
+  get prefix() { return this.path.map((g) => g.id + '/').join(''); }
+  fid(n) { return this.prefix + n.id; }
 
   // ------------------------------------------------------------ view
   applyView() {
@@ -104,7 +112,7 @@ export class Editor {
     this.applyView();
   }
   frameAll() {
-    const ns = this.P.nodes;
+    const ns = this.G.nodes;
     if (!ns.length) { Object.assign(this.P.view, { x: 0, y: 0, zoom: 1 }); this.applyView(); return; }
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
     for (const n of ns) {
@@ -123,11 +131,13 @@ export class Editor {
     this.nodesEl.innerHTML = '';
     this.nodeEls.clear();
     this.widgets.clear();
-    for (const n of this.P.nodes) this.nodesEl.appendChild(this.buildNode(n));
+    for (const n of this.G.nodes) this.nodesEl.appendChild(this.buildNode(n));
     for (const id of [...this.sel]) if (!this.nodeEls.has(id)) this.sel.delete(id);
     this.applyView();
     this.refreshSelection();
-    this.el.classList.toggle('is-empty', this.P.nodes.length === 0);
+    this.renderCrumbs();
+    this.el.classList.toggle('is-empty', this.G.nodes.length === 0);
+    this.el.classList.toggle('in-group', this.path.length > 0);
     requestAnimationFrame(() => { this.drawLinks(); this.redrawWidgets(); });
   }
 
@@ -148,15 +158,17 @@ export class Editor {
     el.style.width = (T.width || 220) + 'px';
     el.style.transform = `translate(${n.x}px,${n.y}px)`;
     const head = document.createElement('header');
-    head.innerHTML = `<span class="led"></span><span class="title">${T.title}</span><span class="cat">${cat.label.replace(/s$/, '')}</span>`;
+    const title = n.type === 'group' ? escapeHtml(n.params.name || 'Group') : T.title;
+    head.innerHTML = `<span class="led"></span><span class="title">${title}</span><span class="cat">${cat.label.replace(/s$/, '')}</span>`;
     head.title = T.desc || '';
+    if (n.type === 'group') head.addEventListener('dblclick', (e) => { e.stopPropagation(); this.enter(n); });
     el.appendChild(head);
     const body = document.createElement('div');
     body.className = 'body';
     el.appendChild(body);
 
-    for (const o of T.outputs || []) body.appendChild(this.sockRow('out', o, n));
-    for (const i of T.inputs || []) body.appendChild(this.sockRow('in', i, n));
+    for (const o of outputsOf(n, this.parent)) body.appendChild(this.sockRow('out', o, n));
+    for (const i of inputsOf(n, this.parent).filter((x) => !x.param)) body.appendChild(this.sockRow('in', i, n));
     if (T.widget) body.appendChild(this.buildWidget(T.widget, n));
     for (const spec of T.params) body.appendChild(this.paramRow(n, spec));
     this.nodeEls.set(n.id, el);
@@ -167,8 +179,9 @@ export class Editor {
     const row = document.createElement('div');
     row.className = `row sockrow ${dir}`;
     row.innerHTML = dir === 'out'
-      ? `<span class="lbl">${s.label}</span><i class="sock ${s.type}" data-dir="out" data-port="${s.key}" data-type="${s.type}" data-node="${n.id}"></i>`
-      : `<i class="sock ${s.type}" data-dir="in" data-port="${s.key}" data-type="${s.type}" data-node="${n.id}"></i><span class="lbl">${s.label}</span>`;
+      ? `<span class="lbl">${escapeHtml(s.label)}</span><i class="sock ${s.type}" data-dir="out" data-port="${s.key}" data-type="${s.type}" data-node="${n.id}"></i>`
+      : `<i class="sock ${s.type}" data-dir="in" data-port="${s.key}" data-type="${s.type}" data-node="${n.id}"></i><span class="lbl">${escapeHtml(s.label)}</span>`;
+    if (s.type === 'any') row.classList.add('new-sock');
     return row;
   }
 
@@ -340,7 +353,7 @@ export class Editor {
     wrap.appendChild(cv);
     const T = TYPES[n.type];
     const W = (T.width || 220) - 20;
-    const H = { steps: 78, roll: 64, wave: 54, adsr: 56, filter: 56, scope: 80, output: 40 }[kind] || 60;
+    const H = { steps: 78, roll: 64, wave: 54, adsr: 56, filter: 56, scope: 80, output: 40, wavetable: 46, gscue: 54, group: 40 }[kind] || 60;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     cv.width = W * DPR(); cv.height = H * DPR();
     const g = cv.getContext('2d');
@@ -386,12 +399,12 @@ export class Editor {
   drawLinks() {
     const frag = document.createDocumentFragment();
     const connected = new Set();
-    for (const l of this.P.links) {
+    for (const l of this.G.links) {
       const a = this.socketEl(l.from.node, l.from.port, 'out'), b = this.socketEl(l.to.node, l.to.port, 'in');
       if (!a || !b) continue;
       connected.add(a); connected.add(b);
       const d = Editor.wirePath(this.sockPos(a), this.sockPos(b));
-      const src = this.P.nodes.find((n) => n.id === l.from.node);
+      const src = this.G.nodes.find((n) => n.id === l.from.node);
       const color = CATEGORIES[TYPES[src.type].cat].color;
       const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
       g.setAttribute('class', `link ${a.dataset.type}${l.to.port.startsWith('p:') ? ' mod' : ''}${this.selLink === l.id ? ' selected' : ''}`);
@@ -524,20 +537,20 @@ export class Editor {
     if (sock.dataset.dir === 'out') from = { node: sock.dataset.node, port: sock.dataset.port, type: sock.dataset.type, el: sock };
     else {
       // pick up the newest wire on this input, if any
-      const ls = this.P.links.filter((l) => l.to.node === sock.dataset.node && l.to.port === sock.dataset.port);
+      const ls = this.G.links.filter((l) => l.to.node === sock.dataset.node && l.to.port === sock.dataset.port);
       if (!ls.length) {
         // dragging backwards from an empty input: find an output to feed it
         from = { node: sock.dataset.node, port: sock.dataset.port, type: sock.dataset.type, el: sock, reverse: true };
       } else {
         detached = ls[ls.length - 1];
-        this.P.links = this.P.links.filter((l) => l !== detached);
+        this.G.links = this.G.links.filter((l) => l !== detached);
         const src = this.socketEl(detached.from.node, detached.from.port, 'out');
         from = { node: detached.from.node, port: detached.from.port, type: src.dataset.type, el: src };
         this.drawLinks();
       }
     }
     const a = this.sockPos(from.el);
-    const color = CATEGORIES[TYPES[this.P.nodes.find((n) => n.id === from.node).type].cat].color;
+    const color = CATEGORIES[TYPES[this.G.nodes.find((n) => n.id === from.node).type].cat].color;
     this.dragWire.style.setProperty('--c', color);
     this.dragWire.setAttribute('class', 'drag-wire on ' + from.type);
     this.el.classList.add('wiring', 'wiring-' + from.type, from.reverse ? 'wiring-rev' : 'wiring-fwd');
@@ -548,20 +561,21 @@ export class Editor {
       const s = hit && hit.closest && hit.closest('.sock');
       target = null;
       this.el.querySelectorAll('.sock.hover').forEach((x) => x.classList.remove('hover'));
-      if (s && s.dataset.type === from.type && s.dataset.node !== from.node && s.dataset.dir === (from.reverse ? 'out' : 'in')) { target = s; s.classList.add('hover'); }
+      const okType = s && (s.dataset.type === from.type || (s.dataset.type === 'any') !== (from.type === 'any'));
+      if (s && okType && s.dataset.node !== from.node && s.dataset.dir === (from.reverse ? 'out' : 'in')) { target = s; s.classList.add('hover'); }
       const b = target ? this.sockPos(target) : p;
       this.dragWire.setAttribute('d', from.reverse ? Editor.wirePath(b, a) : Editor.wirePath(a, b));
     };
     const up = (ev) => {
       window.removeEventListener('pointermove', mv); window.removeEventListener('pointerup', up);
       this.dragWire.setAttribute('class', 'drag-wire'); this.dragWire.setAttribute('d', '');
-      this.el.classList.remove('wiring', 'wiring-audio', 'wiring-notes', 'wiring-rev', 'wiring-fwd');
+      this.el.classList.remove('wiring', 'wiring-audio', 'wiring-notes', 'wiring-buffer', 'wiring-any', 'wiring-rev', 'wiring-fwd');
       this.el.querySelectorAll('.sock.hover').forEach((x) => x.classList.remove('hover'));
       if (target) {
         const f = from.reverse ? { node: target.dataset.node, port: target.dataset.port } : { node: from.node, port: from.port };
         const t = from.reverse ? { node: from.node, port: from.port } : { node: target.dataset.node, port: target.dataset.port };
         this.app.connect(f, t);
-      } else if (!detached && ev.target.closest && !ev.target.closest('.node')) {
+      } else if (!detached && from.type !== 'any' && ev.target.closest && !ev.target.closest('.node')) {
         // dropped on empty canvas: offer to create a node and connect it
         this.app.openAddMenu(ev.clientX, ev.clientY, { from, });
         this.app.structureChanged();
@@ -572,29 +586,142 @@ export class Editor {
     mv(e);
   }
 
+  // ------------------------------------------------------------ groups
+  renderCrumbs() {
+    const parts = [{ label: this.P.name || 'Project', depth: 0 }, ...this.path.map((g, i) => ({ label: g.params.name || 'Group', depth: i + 1 }))];
+    this.crumbs.innerHTML = parts.map((p, i) => `<button data-d="${p.depth}" class="${i === parts.length - 1 ? 'cur' : ''}">${escapeHtml(p.label)}</button>`).join('<span>›</span>');
+    this.crumbs.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => this.goTo(+b.dataset.d)));
+    this.crumbs.style.display = this.path.length ? '' : 'none';
+  }
+  goTo(depth) {
+    if (depth === this.path.length) return;
+    this.path.length = depth;
+    this.sel.clear(); this.selLink = null;
+    this.render();
+    requestAnimationFrame(() => this.frameAll());
+  }
+  enter(n) {
+    if (n.type !== 'group') return;
+    this.path.push(n);
+    this.sel.clear(); this.selLink = null;
+    this.render();
+    requestAnimationFrame(() => this.frameAll());
+  }
+  exit() { if (this.path.length) this.goTo(this.path.length - 1); }
+  /** Re-find the open groups after the project object was replaced (undo, load). */
+  reresolvePath() {
+    const ids = this.path.map((g) => g.id), path = [];
+    let G = this.P;
+    for (const id of ids) { const g = G.nodes.find((n) => n.id === id && n.type === 'group'); if (!g) break; path.push(g); G = g.data; }
+    this.path = path;
+  }
+
+  /** Collapse the selection into a Group node (Ctrl+G). */
+  groupSelection() {
+    const G = this.G, parent = this.parent;
+    const sel = G.nodes.filter((n) => this.sel.has(n.id) && !TYPES[n.type].internal);
+    if (!sel.length) return;
+    const ids = new Set(sel.map((n) => n.id));
+    const byId = new Map(G.nodes.map((n) => [n.id, n]));
+    const inner = G.links.filter((l) => ids.has(l.from.node) && ids.has(l.to.node));
+    const inbound = G.links.filter((l) => !ids.has(l.from.node) && ids.has(l.to.node));
+    const outbound = G.links.filter((l) => ids.has(l.from.node) && !ids.has(l.to.node));
+    const xs = sel.map((n) => n.x), ys = sel.map((n) => n.y);
+    const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+    const group = makeNode('group', cx, cy);
+    group.params.name = 'Group';
+    const gi = makeNode('group_in', Math.min(...xs) - 300, cy), go = makeNode('group_out', Math.max(...xs) + 300, cy);
+    const data = { nodes: [gi, ...sel, go], links: [...inner], inputs: [], outputs: [] };
+    const ext = [];
+    const inKeys = new Map();
+    for (const l of inbound) {
+      const k = l.from.node + ':' + l.from.port;
+      if (!inKeys.has(k)) {
+        const sock = inputsOf(byId.get(l.to.node), parent).find((s) => s.key === l.to.port) || { type: 'audio', label: 'In' };
+        const key = 'i' + data.inputs.length;
+        data.inputs.push({ key, type: sock.type, label: sock.label });
+        inKeys.set(k, key);
+        ext.push({ id: uid('l'), from: { ...l.from }, to: { node: group.id, port: key } });
+      }
+      data.links.push({ id: uid('l'), from: { node: gi.id, port: inKeys.get(k) }, to: { ...l.to } });
+    }
+    const outKeys = new Map();
+    for (const l of outbound) {
+      const k = l.from.node + ':' + l.from.port;
+      if (!outKeys.has(k)) {
+        const sock = outputsOf(byId.get(l.from.node), parent).find((s) => s.key === l.from.port) || { type: 'audio', label: 'Out' };
+        const key = 'o' + data.outputs.length;
+        data.outputs.push({ key, type: sock.type, label: sock.label });
+        outKeys.set(k, key);
+        data.links.push({ id: uid('l'), from: { ...l.from }, to: { node: go.id, port: key } });
+      }
+      ext.push({ id: uid('l'), from: { node: group.id, port: outKeys.get(k) }, to: { ...l.to } });
+    }
+    group.data = data;
+    G.nodes = [...G.nodes.filter((n) => !ids.has(n.id)), group];
+    G.links = [...G.links.filter((l) => !ids.has(l.from.node) && !ids.has(l.to.node)), ...ext];
+    if (!this.path.length) {
+      const song = this.P.song, gone = song.tracks.filter((t) => ids.has(t.node)).map((t) => t.id);
+      song.tracks = song.tracks.filter((t) => !gone.includes(t.id)); song.clips = song.clips.filter((c) => !gone.includes(c.track));
+    }
+    this.sel = new Set([group.id]);
+    this.render();
+    this.app.structureChanged();
+  }
+
+  /** Dissolve a group back into its parent graph (Ctrl+Shift+G). */
+  ungroup(group) {
+    const G = this.G;
+    if (!group || group.type !== 'group') return;
+    const d = group.data;
+    const gi = d.nodes.find((n) => n.type === 'group_in'), go = d.nodes.find((n) => n.type === 'group_out');
+    const inner = d.nodes.filter((n) => n !== gi && n !== go);
+    const xs = inner.map((n) => n.x), ys = inner.map((n) => n.y);
+    const ox = group.x - (Math.min(...xs, 0) + Math.max(...xs, 0)) / 2, oy = group.y - (Math.min(...ys, 0) + Math.max(...ys, 0)) / 2;
+    for (const n of inner) { n.x = Math.round(n.x + ox); n.y = Math.round(n.y + oy); }
+    const links = d.links.filter((l) => (!gi || (l.from.node !== gi.id)) && (!go || l.to.node !== go.id));
+    for (const e of G.links.filter((l) => l.to.node === group.id))
+      for (const l of d.links.filter((x) => gi && x.from.node === gi.id && x.from.port === e.to.port)) links.push({ id: uid('l'), from: { ...e.from }, to: { ...l.to } });
+    for (const e of G.links.filter((l) => l.from.node === group.id))
+      for (const l of d.links.filter((x) => go && x.to.node === go.id && x.to.port === e.from.port)) links.push({ id: uid('l'), from: { ...l.from }, to: { ...e.to } });
+    G.nodes = [...G.nodes.filter((n) => n !== group), ...inner];
+    G.links = [...G.links.filter((l) => l.from.node !== group.id && l.to.node !== group.id), ...links];
+    this.sel = new Set(inner.map((n) => n.id));
+    this.render();
+    this.app.structureChanged();
+  }
+
   // ------------------------------------------------------------ edit ops
   deleteSelection() {
     if (this.selLink) {
-      this.P.links = this.P.links.filter((l) => l.id !== this.selLink);
+      this.G.links = this.G.links.filter((l) => l.id !== this.selLink);
       this.selLink = null;
       this.app.structureChanged();
       return;
     }
+    for (const n of this.G.nodes) if (this.sel.has(n.id) && TYPES[n.type].internal) this.sel.delete(n.id);
     if (!this.sel.size) return;
-    this.P.nodes = this.P.nodes.filter((n) => !this.sel.has(n.id));
-    this.P.links = this.P.links.filter((l) => !this.sel.has(l.from.node) && !this.sel.has(l.to.node));
+    const G = this.G;
+    G.nodes = G.nodes.filter((n) => !this.sel.has(n.id));
+    G.links = G.links.filter((l) => !this.sel.has(l.from.node) && !this.sel.has(l.to.node));
+    if (!this.path.length) {
+      const song = this.P.song;
+      const gone = song.tracks.filter((t) => this.sel.has(t.node)).map((t) => t.id);
+      song.tracks = song.tracks.filter((t) => !gone.includes(t.id));
+      song.clips = song.clips.filter((c) => !gone.includes(c.track));
+    }
     for (const id of this.sel) { const el = this.nodeEls.get(id); el && el.remove(); this.nodeEls.delete(id); this.widgets.delete(id); }
     this.sel.clear();
     this.refreshSelection();
-    this.el.classList.toggle('is-empty', this.P.nodes.length === 0);
+    this.el.classList.toggle('is-empty', this.G.nodes.length === 0);
     this.app.structureChanged();
   }
 
   copy() {
-    const nodes = this.P.nodes.filter((n) => this.sel.has(n.id));
+    const nodes = this.G.nodes.filter((n) => this.sel.has(n.id) && !TYPES[n.type].internal);
     if (!nodes.length) return null;
     const ids = new Set(nodes.map((n) => n.id));
-    return JSON.stringify({ nodes, links: this.P.links.filter((l) => ids.has(l.from.node) && ids.has(l.to.node)) });
+    return JSON.stringify({ nodes, links: this.G.links.filter((l) => ids.has(l.from.node) && ids.has(l.to.node)) });
   }
 
   paste(clip, at) {
@@ -608,8 +735,8 @@ export class Editor {
       c.x = at ? Math.round(at.x + n.x - minX) : n.x + 36; c.y = at ? Math.round(at.y + n.y - minY) : n.y + 36;
       return c;
     });
-    this.P.nodes.push(...fresh);
-    for (const l of links) this.P.links.push({ id: uid('l'), from: { node: map.get(l.from.node), port: l.from.port }, to: { node: map.get(l.to.node), port: l.to.port } });
+    this.G.nodes.push(...fresh);
+    for (const l of links) this.G.links.push({ id: uid('l'), from: { node: map.get(l.from.node), port: l.from.port }, to: { node: map.get(l.to.node), port: l.to.port } });
     for (const n of fresh) this.addNodeEl(n);
     this.select(fresh.map((n) => n.id));
     this.app.structureChanged();
@@ -617,12 +744,16 @@ export class Editor {
 
   addNode(type, at, connectFrom) {
     const n = makeNode(type, at.x, at.y);
-    if (type === 'output') n.params.name = this.app.uniqueCueName('cue');
-    this.P.nodes.push(n);
+    if (type === 'output' || type === 'gs_out') n.params.name = this.app.uniqueCueName('cue');
+    if (type === 'group') {
+      const gi = makeNode('group_in', -300, 0), go = makeNode('group_out', 300, 0);
+      n.data = { nodes: [gi, go], links: [], inputs: [], outputs: [] };
+    }
+    this.G.nodes.push(n);
     this.addNodeEl(n);
     if (connectFrom) {
       const want = connectFrom.reverse ? 'out' : 'in';
-      const list = want === 'out' ? TYPES[type].outputs || [] : inputSockets(type);
+      const list = want === 'out' ? outputsOf(n, this.parent) : inputsOf(n, this.parent);
       const s = list.find((x) => x.type === connectFrom.type);
       if (s) {
         if (connectFrom.reverse) this.app.connect({ node: n.id, port: s.key }, { node: connectFrom.node, port: connectFrom.port }, true);
@@ -681,7 +812,7 @@ const WIDGETS = {
     let lastPlay = -2;
     w.live = () => {
       const eng = app.engine;
-      if (!eng.playing || !eng.graph || !app.isActive(n.id)) { if (lastPlay !== -1) { lastPlay = -1; w.draw(); } return; }
+      if (!eng.playing || !eng.graph || !app.isActive(n.params)) { if (lastPlay !== -1) { lastPlay = -1; w.draw(); } return; }
       const sd = (60 / app.project.bpm) * parseFloat(n.params.rate);
       const k = Math.floor(eng.position() / sd + 1e-6) % n.params.steps;
       if (k !== lastPlay) { lastPlay = k; w.draw(k); }
@@ -749,7 +880,7 @@ const WIDGETS = {
     };
     w.live = () => {
       const eng = app.engine;
-      if (!eng.playing || !app.isActive(n.id)) { if (w._p !== -1) { w._p = -1; w.draw(); } return; }
+      if (!eng.playing || !app.isActive(n.params)) { if (w._p !== -1) { w._p = -1; w.draw(); } return; }
       const clip = (n.params.length * 60) / app.project.bpm;
       w._p = (eng.position() % clip) / clip; w.draw(w._p);
     };
@@ -768,8 +899,16 @@ const WIDGETS = {
         g.fillText('drop an audio file here', W / 2, H / 2 + 4); return;
       }
       drawWave(g, buf, W, H, CATEGORIES.source.color, n.params.reverse);
-      const st = Math.min(1, n.params.start / buf.duration);
-      if (st > 0) { g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, st * W, H); }
+      if (n.type === 'granular') {
+        const x = n.params.position * W, sw = n.params.spray * W * 0.5;
+        g.fillStyle = 'rgba(255,255,255,0.12)'; g.fillRect(x - sw, 0, sw * 2, H);
+        g.fillStyle = '#fff'; g.fillRect(x, 0, 1.5, H);
+      } else {
+        const st = Math.min(1, n.params.start / buf.duration);
+        if (st > 0) { g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillRect(0, 0, st * W, H); }
+        const meta = app.project.samples.find((x) => x.id === n.params.sample);
+        if (meta && meta.slices) { g.fillStyle = 'rgba(255,181,71,0.85)'; for (const t of meta.slices) g.fillRect((t / buf.duration) * W, 0, 1, H); }
+      }
       g.fillStyle = 'rgba(255,255,255,0.55)'; g.font = '10px "JetBrains Mono", monospace'; g.textAlign = 'right';
       g.fillText(buf.duration.toFixed(2) + 's', W - 4, H - 4);
     };
@@ -846,7 +985,7 @@ const WIDGETS = {
       g.clearRect(0, 0, W, H);
       g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, W, H);
       g.strokeStyle = 'rgba(255,255,255,0.07)'; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
-      const a = app.engine.analyserFor(n.id);
+      const a = app.engine.analyserFor(n.params);
       if (!a) return;
       const c = CATEGORIES.util.color;
       g.strokeStyle = '#d6e4ff'; g.lineWidth = 1.4; g.shadowColor = c; g.shadowBlur = 6;
@@ -874,6 +1013,62 @@ const WIDGETS = {
     w.draw();
   },
 
+  group(w, wrap) {
+    const { n, cv } = w;
+    cv.remove();
+    wrap.classList.add('w-output-bar');
+    wrap.innerHTML = `<button class="mini-btn">Enter ▸</button><span class="info"></span>`;
+    const b = wrap.querySelector('button');
+    b.addEventListener('pointerdown', (e) => e.stopPropagation());
+    b.addEventListener('click', () => this.enter(n));
+    w.draw = () => { wrap.querySelector('.info').textContent = `${n.data.nodes.length - 2} nodes · Tab to enter`; };
+    w.draw();
+  },
+
+  wavetable(w) {
+    const { g, W, H, n } = w;
+    const app = this.app;
+    w.draw = () => {
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(255,255,255,0.03)'; g.fillRect(0, 0, W, H);
+      const shape = wavetablePreview(n.params, app.engine.buffers, 160);
+      const c = CATEGORIES.source.color;
+      for (let f = 0; f < 3; f++) {
+        // ghost frames either side of the current position give a sense of the morph
+        const p = Math.min(1, Math.max(0, n.params.position + (f - 1) * 0.15));
+        const s = f === 1 ? shape : wavetablePreview({ ...n.params, position: p }, app.engine.buffers, 160);
+        g.beginPath();
+        for (let i = 0; i < s.length; i++) { const x = (i / (s.length - 1)) * W, y = H / 2 - s[i] * (H / 2 - 4); i ? g.lineTo(x, y) : g.moveTo(x, y); }
+        g.strokeStyle = f === 1 ? c : 'rgba(63,216,255,0.18)'; g.lineWidth = f === 1 ? 1.6 : 1; g.stroke();
+      }
+    };
+    w.draw();
+  },
+
+  gscue(w, wrap) {
+    const { g, W, H, n, cv } = w;
+    const app = this.app;
+    const bar = document.createElement('div');
+    bar.className = 'w-btns';
+    bar.innerHTML = `<button class="mini-btn play">▶</button><button class="mini-btn code">GDScript</button><span class="info"></span>`;
+    wrap.appendChild(bar);
+    bar.querySelectorAll('button').forEach((b) => b.addEventListener('pointerdown', (e) => e.stopPropagation()));
+    const fid = this.fid(n);
+    bar.querySelector('.play').addEventListener('click', () => app.auditionCue(fid));
+    bar.querySelector('.code').addEventListener('click', () => app.showCueCode(fid));
+    w.draw = () => {
+      g.clearRect(0, 0, W, H);
+      g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(0, 0, W, H);
+      let data;
+      try { data = app.bakeCue(fid); } catch (e) { data = null; }
+      if (!data || data.length < 2) { g.fillStyle = 'rgba(255,255,255,0.35)'; g.font = '11px Inter'; g.textAlign = 'center'; g.fillText('connect a Synth.* chain', W / 2, H / 2 + 4); bar.querySelector('.info').textContent = ''; return; }
+      const fake = { getChannelData: () => data };
+      drawWave(g, fake, W, H, CATEGORIES.gsynth.color);
+      bar.querySelector('.info').textContent = (data.length / 22050).toFixed(3) + 's';
+    };
+    w.draw();
+  },
+
   output(w, wrap) {
     const { g, W, H, n, cv } = w;
     const app = this.app;
@@ -885,12 +1080,13 @@ const WIDGETS = {
       <span class="info"></span>`;
     const solo = wrap.querySelector('.solo');
     wrap.querySelectorAll('button').forEach((b) => b.addEventListener('pointerdown', (e) => e.stopPropagation()));
-    solo.addEventListener('click', () => app.toggleSolo(n.id));
-    wrap.querySelector('.exp').addEventListener('click', () => app.exportOne(n.id));
+    const fid = this.fid(n);
+    solo.addEventListener('click', () => app.toggleSolo(fid));
+    wrap.querySelector('.exp').addEventListener('click', () => app.exportOne(fid));
     w.draw = () => {
-      solo.classList.toggle('on', app.engine.playing && app.engine.solo === n.id);
-      const info = app.lastRender.get(n.id);
-      wrap.querySelector('.info').textContent = info ? `${info.seconds.toFixed(2)}s · pk ${(20 * Math.log10(info.peak || 1e-9)).toFixed(1)}dB` : '';
+      solo.classList.toggle('on', app.engine.playing && app.engine.solo === fid);
+      const info = app.lastRender.get(n.params);
+      wrap.querySelector('.info').textContent = info ? `${info.seconds.toFixed(2)}s` + (isFinite(info.lufs) ? ` · ${info.lufs.toFixed(1)} LUFS` : '') : '';
     };
     w.draw();
   },

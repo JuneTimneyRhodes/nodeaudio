@@ -9,7 +9,7 @@ import { TYPES, defaultParams } from './nodes.js';
 export const FORMAT = 'nodeaudio-project';
 export const VERSION = 1;
 
-export const GODOT_EXPORT = { sampleRate: 22050, channels: 1, bitDepth: 16, normalize: true, peakDb: -1, trim: true, trimDb: -60 };
+export const GODOT_EXPORT = { sampleRate: 22050, channels: 1, bitDepth: 16, normalize: true, normMode: 'peak', lufs: -16, peakDb: -1, trim: true, trimDb: -60 };
 
 let counter = 0;
 export const uid = (p = 'n') => p + Date.now().toString(36).slice(-5) + (counter++).toString(36) + Math.random().toString(36).slice(2, 5);
@@ -21,8 +21,11 @@ export function emptyProject() {
     export: { ...GODOT_EXPORT },
     view: { x: 0, y: 0, zoom: 1 },
     nodes: [], links: [], samples: [],
+    song: emptySong(),
   };
 }
+
+export const emptySong = () => ({ enabled: false, bars: 16, tracks: [], clips: [] });
 
 export function makeNode(type, x, y) {
   const T = TYPES[type];
@@ -34,22 +37,32 @@ export function migrate(p) {
   if (!p || p.format !== FORMAT) throw new Error('Not a NodeAudio project file');
   const base = emptyProject();
   const out = { ...base, ...p, export: { ...base.export, ...(p.export || {}) }, view: { ...base.view, ...(p.view || {}) } };
-  out.nodes = (p.nodes || []).filter((n) => TYPES[n.type]).map((n) => {
+  Object.assign(out, migrateGraph(p));
+  out.samples = p.samples || [];
+  out.song = { ...emptySong(), ...(p.song || {}) };
+  const ids = new Set(out.nodes.map((n) => n.id));
+  out.song.tracks = out.song.tracks.filter((t) => ids.has(t.node));
+  const tids = new Set(out.song.tracks.map((t) => t.id));
+  out.song.clips = out.song.clips.filter((c) => tids.has(c.track));
+  return out;
+}
+
+function migrateGraph(g) {
+  const nodes = (g.nodes || []).filter((n) => TYPES[n.type]).map((n) => {
     const T = TYPES[n.type];
     const node = { ...n, params: { ...defaultParams(n.type), ...(n.params || {}) } };
-    if (T.initData) node.data = { ...T.initData(), ...(n.data || {}) };
+    if (n.type === 'group') node.data = { inputs: [], outputs: [], ...(n.data || {}), ...migrateGraph(n.data || {}) };
+    else if (T.initData) node.data = { ...T.initData(), ...(n.data || {}) };
     return node;
   });
-  const ids = new Set(out.nodes.map((n) => n.id));
-  out.links = (p.links || []).filter((l) => ids.has(l.from.node) && ids.has(l.to.node));
-  out.samples = p.samples || [];
-  return out;
+  const ids = new Set(nodes.map((n) => n.id));
+  return { nodes, links: (g.links || []).filter((l) => ids.has(l.from.node) && ids.has(l.to.node)) };
 }
 
 export function serialize(p) { return JSON.stringify(p, null, 1); }
 
 /** Graph-only snapshot for undo (samples are append-only and kept out of history). */
-export const snapshot = (p) => JSON.stringify({ nodes: p.nodes, links: p.links, bpm: p.bpm, lengthBeats: p.lengthBeats, name: p.name, export: p.export });
+export const snapshot = (p) => JSON.stringify({ nodes: p.nodes, links: p.links, bpm: p.bpm, lengthBeats: p.lengthBeats, name: p.name, export: p.export, song: p.song });
 
 export class History {
   constructor() { this.stack = []; this.i = -1; }
