@@ -51,6 +51,7 @@ function migrateGraph(g) {
   const nodes = (g.nodes || []).filter((n) => TYPES[n.type]).map((n) => {
     const T = TYPES[n.type];
     const node = { ...n, params: { ...defaultParams(n.type), ...(n.params || {}) } };
+    if (n.type === 'scope' && node.params.mode === 'spectrum') node.params.mode = 'bars'; // renamed in v3
     if (n.type === 'group') node.data = { inputs: [], outputs: [], ...(n.data || {}), ...migrateGraph(n.data || {}) };
     else if (T.initData) node.data = { ...T.initData(), ...(n.data || {}) };
     return node;

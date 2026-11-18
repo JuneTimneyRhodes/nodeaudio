@@ -2,6 +2,7 @@
 
 import { TYPES, CATEGORIES, inputsOf, outputsOf, noteName, wavetablePreview } from './nodes.js';
 import { makeNode, uid } from './project.js';
+import { Viz } from './visualizer.js';
 
 const SVG_OFF = 50000; // the wire layer is a huge SVG offset by this much, so hit-testing works everywhere
 const DPR = () => Math.min(2, window.devicePixelRatio || 1);
@@ -353,7 +354,7 @@ export class Editor {
     wrap.appendChild(cv);
     const T = TYPES[n.type];
     const W = (T.width || 220) - 20;
-    const H = { steps: 78, roll: 64, wave: 54, adsr: 56, filter: 56, scope: 80, output: 40, wavetable: 46, gscue: 54, group: 40 }[kind] || 60;
+    const H = { steps: 78, roll: 64, wave: 54, adsr: 56, filter: 56, scope: 130, output: 40, wavetable: 46, gscue: 54, group: 40 }[kind] || 60;
     cv.style.width = W + 'px'; cv.style.height = H + 'px';
     cv.width = W * DPR(); cv.height = H * DPR();
     const g = cv.getContext('2d');
@@ -978,37 +979,13 @@ const WIDGETS = {
   },
 
   scope(w) {
-    const { g, W, H, n } = w;
+    const { W, H, n, cv } = w;
     const app = this.app;
-    let data = null;
-    w.draw = () => {
-      g.clearRect(0, 0, W, H);
-      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, 0, W, H);
-      g.strokeStyle = 'rgba(255,255,255,0.07)'; g.beginPath(); g.moveTo(0, H / 2); g.lineTo(W, H / 2); g.stroke();
-      const a = app.engine.analyserFor(n.params);
-      if (!a) return;
-      const c = CATEGORIES.util.color;
-      g.strokeStyle = '#d6e4ff'; g.lineWidth = 1.4; g.shadowColor = c; g.shadowBlur = 6;
-      g.beginPath();
-      if (n.params.mode === 'spectrum') {
-        if (!data || data.length !== a.frequencyBinCount) data = new Uint8Array(a.frequencyBinCount);
-        a.getByteFrequencyData(data);
-        const nyq = app.engine.ctx.sampleRate / 2;
-        for (let x = 0; x < W; x++) {
-          const hz = 20 * Math.pow(1000, x / W), b = Math.min(data.length - 1, Math.floor((hz / nyq) * data.length));
-          const y = H - (data[b] / 255) * H;
-          x ? g.lineTo(x, y) : g.moveTo(x, y);
-        }
-      } else {
-        const buf = new Float32Array(a.fftSize);
-        a.getFloatTimeDomainData(buf);
-        let z = 0; // trigger on rising zero crossing for a stable trace
-        for (let i = 1; i < buf.length / 2; i++) if (buf[i - 1] < 0 && buf[i] >= 0) { z = i; break; }
-        const span = 1024;
-        for (let x = 0; x < W; x++) { const v = buf[z + Math.floor((x / W) * span)] || 0; const y = H / 2 - v * (H / 2 - 2); x ? g.lineTo(x, y) : g.moveTo(x, y); }
-      }
-      g.stroke(); g.shadowBlur = 0;
-    };
+    const viz = new Viz(cv, { compact: true });
+    viz.fit(W, H);
+    cv.title = 'Double-click to open in the Visualizer panel';
+    cv.addEventListener('dblclick', (e) => { e.stopPropagation(); app.openVisualizer(n.params); });
+    w.draw = () => { viz.setMode(n.params.mode === 'spectrum' ? 'bars' : n.params.mode); viz.frame(app.engine.vizSource(n.params)); };
     w.live = () => w.draw();
     w.draw();
   },

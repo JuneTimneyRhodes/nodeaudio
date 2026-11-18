@@ -854,14 +854,17 @@ export const TYPES = {
   },
 
   scope: {
-    title: 'Scope', cat: 'util', width: 240, widget: 'scope',
-    desc: 'Pass-through oscilloscope / spectrum.',
+    title: 'Scope', cat: 'util', width: 260, widget: 'scope',
+    desc: 'Pass-through visualiser: spectrum, waterfall, oscilloscope, stereo field, radial, nebula or meters. Drop one anywhere in a patch to see that point.',
     inputs: [{ key: 'in', type: 'audio', label: 'In' }],
     outputs: [{ key: 'out', type: 'audio', label: 'Out' }],
-    params: [{ key: 'mode', label: 'View', type: 'select', options: [['wave', 'waveform'], ['spectrum', 'spectrum']], def: 'wave' }],
+    params: [{ key: 'mode', label: 'View', type: 'select', options: [['bars', 'spectrum'], ['waterfall', 'waterfall'], ['wave', 'oscilloscope'], ['vector', 'stereo field'], ['radial', 'radial'], ['nebula', 'nebula'], ['meters', 'meters']], def: 'wave' }],
     build(ctx) {
       const g = ctx.createGain(), a = ctx.createAnalyser(); a.fftSize = 2048; g.connect(a);
-      return { inputs: { in: g }, outputs: { out: g }, analyser: a, set: () => true };
+      const split = ctx.createChannelSplitter(2), aL = ctx.createAnalyser(), aR = ctx.createAnalyser();
+      aL.fftSize = aR.fftSize = 2048;
+      g.connect(split); split.connect(aL, 0); split.connect(aR, 1);
+      return { inputs: { in: g }, outputs: { out: g }, analyser: a, aL, aR, set: () => true };
     },
   },
 

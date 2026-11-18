@@ -69,6 +69,14 @@ are watching) with **● Tab audio**. Only use audio you have the rights to. The
 Sample editor trims, cuts, normalises, reverses, fades, changes gain, resamples to
 shrink the project, auto-slices at transients (or equal slices), and sets loop regions.
 
+**Visualizers.** The dock's **Visualizer** tab shows the master output (or any Scope
+node) as *Spectrum* bars, a scrolling *Waterfall* spectrogram, a stereo *Scope*, a
+*Stereo* field goniometer with phase correlation, a *Radial* spectrum, *Nebula* — an
+audio-reactive starfield whose speed, clouds and core glow follow the lows, mids and
+highs — and level *Meters*. **⛶ Fullscreen** for showing a track off (keys 1–7 switch
+modes, Esc leaves); where a browser refuses fullscreen it fills the window instead.
+Scope nodes offer the same modes inline; double-click one to open it in the panel.
+
 ## Exporting for space-rogue-repo
 
 The game (Godot 4) synthesises its cues at `Synth.MIX_RATE = 22050` Hz mono and plays

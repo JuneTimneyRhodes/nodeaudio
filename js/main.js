@@ -17,6 +17,7 @@ import { makeZip, encodeWav } from './wav.js';
 import * as proj from './project.js';
 import { encodeRender } from './ogg.js';
 import { fitTopbar } from './topbar.js';
+import { VizPanel } from './vizpanel.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -38,6 +39,7 @@ class App {
     this.roll = new PianoRoll(this, $('#pianoroll'));
     this.arr = new Arrangement(this, $('#arrangement'));
     this.sed = new SampleEditor(this, $('#sampleeditor'));
+    this.vizp = new VizPanel(this, $('#vizpanel'));
     this.rview = new RenderView(this);
     this.live = new LiveInput(this);
     this.recorder = new Recorder(this);
@@ -234,6 +236,7 @@ class App {
       this.editor.animate();
       this.roll.animate();
       this.arr.animate();
+      this.vizp.animate();
       this.drawTransport();
       this.drawMeter();
       if (this.recorder.active) $('#rec-time').textContent = this.recorder.elapsed().toFixed(1) + 's';
@@ -579,6 +582,7 @@ class App {
     d.dataset.tab = tab;
     d.querySelectorAll('.dock-tab').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
     d.querySelectorAll('.dock-panel').forEach((p) => p.classList.toggle('on', p.dataset.tab === tab));
+    if (tab === 'viz') this.vizp.refreshSources();
     requestAnimationFrame(() => { if (tab === 'song') this.arr.render(); if (tab === 'sample') this.sed.layout(); if (tab === 'roll') this.roll.layout(); });
   }
   hideDock() { $('#dock').classList.remove('open'); }
@@ -799,6 +803,7 @@ class App {
   closeAddMenu() { $('#addmenu').classList.remove('open'); window.removeEventListener('pointerdown', this._amClose); }
 
   openPianoRoll(n) { this.roll.open(n); }
+  openVisualizer(params = null) { this.vizp.open(params); }
 
   // ---------------------------------------------------------------- panels
   renderPanels() {

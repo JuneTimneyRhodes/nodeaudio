@@ -311,8 +311,13 @@ export class Engine {
       this.ctx = new AudioContext({ latencyHint: 'interactive' });
       this.master = this.ctx.createGain();
       this.analyser = this.ctx.createAnalyser();
-      this.analyser.fftSize = 2048;
+      this.analyser.fftSize = 8192; // fine low-end resolution for the spectrum views
       this.master.connect(this.analyser).connect(this.ctx.destination);
+      // per-channel analysers for the stereo visualisers (goniometer, meters, scope)
+      const split = this.ctx.createChannelSplitter(2);
+      this.aL = this.ctx.createAnalyser(); this.aR = this.ctx.createAnalyser();
+      this.aL.fftSize = this.aR.fftSize = 2048;
+      this.master.connect(split); split.connect(this.aL, 0); split.connect(this.aR, 1);
       await ensureWorklets(this.ctx);
     }
     if (this.ctx.state !== 'running') await this.ctx.resume();
@@ -459,6 +464,11 @@ export class Engine {
   idOf(params) { return this.graph ? this.graph.byParams.get(params) : null; }
   isActive(params) { const id = this.idOf(params); return !!(id && this.graph.active.has(id)); }
   analyserFor(params) { const id = this.idOf(params); const i = id && this.graph.inst.get(id); return i && i.analyser; }
+  /** Analysers for a visualiser: a Scope node's (by params), or the master output. */
+  vizSource(params) {
+    if (params) { const id = this.idOf(params), i = id && this.graph.inst.get(id); return i && i.analyser ? { mono: i.analyser, L: i.aL, R: i.aR } : null; }
+    return this.analyser && (this.playing || this.idle) ? { mono: this.analyser, L: this.aL, R: this.aR } : null;
+  }
 
   // ---------------------------------------------------------------- live notes
   async liveOn(id, note, vel = 0.9, channel = 0) {
