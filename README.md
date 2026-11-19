@@ -1,12 +1,13 @@
 # NodeAudio
 
+**▶ [Open NodeAudio in your browser](https://junetimneyrhodes.github.io/nodeaudio/)** — no install, works offline once loaded.
+
 A node-based audio workstation that runs entirely in the browser, in the spirit of
 Blender's *Audionodes*. Build sound effects and full soundtracks by patching
 sequencers, synths, samplers and effects together; arrange them into songs; export
 game-ready `.wav` files — or, for the game's own synth, GDScript.
 
-Static files only: no build step and no server code. Live at
-<https://junetimneyrhodes.github.io/nodeaudio/>, installable as an offline app.
+Static files only: no build step and no server code. Installable as an offline app.
 
 ## Run locally
 
